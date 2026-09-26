@@ -145,6 +145,14 @@ export class PlanService {
     return plan.enabledModules.includes(moduleKey);
   }
 
+  public static canAccessModule(moduleKey: string, planOrTenant: string | Tenant): boolean {
+    if (typeof planOrTenant === 'string') {
+      const plan = this.getPlanByName(planOrTenant);
+      return plan.enabledModules.includes(moduleKey);
+    }
+    return this.isModuleAllowedForTenant(moduleKey, planOrTenant);
+  }
+
   public static getEnabledModulesForTenant(tenant: Tenant): string[] {
     if (tenant.enabledModules && tenant.enabledModules.length > 0) {
       return tenant.enabledModules;

@@ -102,6 +102,14 @@ export class TicketService {
     });
   }
 
+  public static resolveTicket(
+    id: string,
+    resolutionNotes?: string,
+    user?: { id: string; name: string; role: string }
+  ): Ticket | undefined {
+    return this.updateStatus(id, 'Resolved', resolutionNotes, user);
+  }
+
   public static addComment(
     ticketId: string,
     comment: {

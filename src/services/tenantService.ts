@@ -2,6 +2,7 @@
 import { StorageEngine, STORAGE_KEYS } from '../database/storageEngine';
 import {
   Tenant,
+  TenantStatus,
   TenantSubscription,
   TenantLicenseChange,
   TenantPayment,
@@ -429,6 +430,41 @@ export class TenantService {
       recordId: tenantId,
       previousValue: tenant.status,
       newValue: 'ON_HOLD'
+    });
+
+    return updated;
+  }
+
+  public static updateStatus(
+    tenantId: string,
+    status: TenantStatus,
+    reason?: string,
+    adminName: string = 'Super Admin'
+  ): Tenant | undefined {
+    const tenant = this.getById(tenantId);
+    if (!tenant) return undefined;
+
+    const prev = tenant.status;
+    const now = new Date().toISOString();
+    const updated = this.update(tenant.id, {
+      status,
+      holdDetails: (status === 'ON_HOLD' || status === 'SUSPENDED') ? {
+        heldAt: now,
+        heldBy: adminName,
+        reason: reason || `Status updated to ${status}`
+      } : undefined
+    });
+
+    AuditService.log({
+      userId: 'user-001',
+      userName: adminName,
+      userRole: 'Super Admin',
+      module: 'Account Lifecycle',
+      action: 'UPDATE',
+      description: `Tenant status updated for ${tenant.companyName} (${tenantId}) from ${prev} to ${status}${reason ? `. Reason: ${reason}` : ''}`,
+      recordId: tenantId,
+      previousValue: prev,
+      newValue: status
     });
 
     return updated;

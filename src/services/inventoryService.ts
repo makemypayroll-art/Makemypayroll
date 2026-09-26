@@ -24,6 +24,10 @@ export class InventoryService {
     return StorageEngine.insert<AssetInventory>(STORAGE_KEYS.ASSETS, newAsset);
   }
 
+  public static createAsset(asset: Omit<AssetInventory, 'id'>): AssetInventory {
+    return this.create(asset);
+  }
+
   public static update(id: string, updates: Partial<AssetInventory>): AssetInventory | undefined {
     return StorageEngine.update<AssetInventory>(STORAGE_KEYS.ASSETS, id, updates);
   }
@@ -32,12 +36,16 @@ export class InventoryService {
     return StorageEngine.remove<AssetInventory>(STORAGE_KEYS.ASSETS, id);
   }
 
-  public static allocateAsset(params: {
-    assetId: string;
-    employeeId: string;
-    handledByEmployeeId: string;
-    notes?: string;
-  }): AssetInventory | undefined {
+  public static allocateAsset(
+    paramsOrAssetId: { assetId: string; employeeId: string; handledByEmployeeId: string; notes?: string } | string,
+    employeeId?: string,
+    handledByEmployeeId?: string,
+    notes?: string
+  ): AssetInventory | undefined {
+    const params = typeof paramsOrAssetId === 'string'
+      ? { assetId: paramsOrAssetId, employeeId: employeeId!, handledByEmployeeId: handledByEmployeeId || 'Admin', notes }
+      : paramsOrAssetId;
+
     const asset = this.getById(params.assetId);
     if (!asset) return undefined;
 

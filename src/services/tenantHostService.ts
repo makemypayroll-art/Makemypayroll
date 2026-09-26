@@ -1,9 +1,8 @@
 // ====================================================================
 // NovaPulse HRMS — Tenant Host Service
 // Centralized Hostname, Subdomain & Environment-Aware Tenant Resolution
-// ====================================================================
 import { PLATFORM_DOMAIN, ROOT_DOMAIN } from '../config/appConfig';
-import { Tenant, TenantStatus } from '../database/schema';
+import { Tenant, TenantStatus, User } from '../database/schema';
 import { TenantService } from './tenantService';
 import {
   RESERVED_SUBDOMAINS,
@@ -266,5 +265,90 @@ export class TenantHostService {
       tenant: null,
       status: null,
     };
+  }
+
+  /**
+   * Resolves access permission based on auth, user profile, and host context
+   */
+  public static resolveAccess(params: {
+    hostname?: string;
+    pathname?: string;
+    user?: User | null;
+    isAuthenticated?: boolean;
+    userTenantId?: string;
+  }): { isAllowed: boolean; allowed: boolean; status: string; reason?: string; context: TenantHostContext } {
+    const hostContext = this.resolve(params.hostname, params.pathname);
+    const user = params.user || null;
+    const isAuthenticated = params.isAuthenticated !== undefined ? params.isAuthenticated : !!user;
+
+    // 1. Unknown Subdomain
+    if (hostContext.status === 'NOT_FOUND' || hostContext.error === 'TENANT_NOT_FOUND') {
+      return { isAllowed: false, allowed: false, status: 'NOT_FOUND', reason: 'TENANT_NOT_FOUND', context: hostContext };
+    }
+
+    // 2. Unauthenticated check
+    if (!isAuthenticated || !user) {
+      return { isAllowed: false, allowed: false, status: 'UNAUTHENTICATED', reason: 'SHOW_LOGIN_SCREEN', context: hostContext };
+    }
+
+    const isSuperAdmin =
+      (user.roleName === 'Super Admin' ||
+       user.roleId === 'role-super-admin' ||
+       (user as any).role === 'super_admin' ||
+       user.id === 'user-001') &&
+      (!user.organizationId || user.organizationId === 'NP-000001' || user.organizationId === 'PLATFORM');
+
+    // 3. Admin Portal Mode (admin.makemypayroll.com)
+    if (hostContext.isAdminPortal) {
+      if (isSuperAdmin) {
+        return { isAllowed: true, allowed: true, status: 'ALLOW_SUPER_ADMIN', context: hostContext };
+      }
+      return { isAllowed: false, allowed: false, status: 'DENY', reason: 'SUPER_ADMIN_PRIVILEGE_REQUIRED', context: hostContext };
+    }
+
+    // 4. Platform Mode (makemypayroll.com)
+    if (hostContext.mode === 'platform') {
+      if (isSuperAdmin) {
+        return { isAllowed: true, allowed: true, status: 'ALLOW_SUPER_ADMIN', context: hostContext };
+      }
+      return { isAllowed: false, allowed: false, status: 'DENY', reason: 'SUPER_ADMIN_PRIVILEGE_REQUIRED', context: hostContext };
+    }
+
+    // 5. Tenant or Legacy Mode
+    const targetTenant = hostContext.tenant;
+    if (!targetTenant) {
+      return { isAllowed: false, allowed: false, status: 'NOT_FOUND', reason: 'TENANT_NOT_FOUND', context: hostContext };
+    }
+
+    // Tenant Status Gate
+    if (targetTenant.status === 'ON_HOLD') {
+      return { isAllowed: false, allowed: false, status: 'BLOCKED_ON_HOLD', reason: 'ACCOUNT_ON_HOLD', context: hostContext };
+    }
+    if (targetTenant.status === 'SUSPENDED') {
+      return { isAllowed: false, allowed: false, status: 'BLOCKED_SUSPENDED', reason: 'ACCOUNT_SUSPENDED', context: hostContext };
+    }
+    if (targetTenant.status === 'CANCELLED') {
+      return { isAllowed: false, allowed: false, status: 'BLOCKED_CANCELLED', reason: 'ACCOUNT_CANCELLED', context: hostContext };
+    }
+
+    // Super Admin can access any tenant
+    if (isSuperAdmin) {
+      return { isAllowed: true, allowed: true, status: 'ALLOW_SUPER_ADMIN_IMPERSONATION', context: hostContext };
+    }
+
+    // Client User Tenant Membership Verification
+    const userOrgId = params.userTenantId || user.organizationId;
+    const isMatch =
+      userOrgId &&
+      (userOrgId === targetTenant.tenantId ||
+       userOrgId === targetTenant.id ||
+       (targetTenant.slug && userOrgId.toLowerCase() === targetTenant.slug.toLowerCase()) ||
+       (targetTenant.subdomain && userOrgId.toLowerCase() === targetTenant.subdomain.toLowerCase()));
+
+    if (!isMatch) {
+      return { isAllowed: false, allowed: false, status: 'DENY', reason: 'UNAUTHORIZED_ORGANIZATION_ACCESS', context: hostContext };
+    }
+
+    return { isAllowed: true, allowed: true, status: 'ALLOW_TENANT_HRMS', context: hostContext };
   }
 }

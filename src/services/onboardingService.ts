@@ -20,32 +20,43 @@ export class OnboardingService {
 
   public static createInvite(params: {
     candidateName: string;
-    candidateEmail: string;
-    candidatePhone: string;
-    departmentId: string;
-    designationId: string;
-    branchId: string;
-    expectedJoiningDate: string;
+    candidateEmail?: string;
+    candidatePhone?: string;
+    email?: string;
+    phone?: string;
+    departmentId?: string;
+    designationId?: string;
+    branchId?: string;
+    expectedJoiningDate?: string;
+    joiningDate?: string;
     assignedShiftId?: string;
     offeredGrossSalary?: number;
+    offeredCtc?: number;
+    organizationId?: string;
   }): OnboardingInvite {
     const token = `np-inv-${Math.random().toString(36).substring(2, 10)}`;
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 14); // 14-day validity
 
+    const email = params.candidateEmail || params.email || 'candidate@example.com';
+    const phone = params.candidatePhone || params.phone || '+91 99999 00000';
+    const joiningDate = params.expectedJoiningDate || params.joiningDate || new Date().toISOString().split('T')[0];
+    const orgId = params.organizationId || StorageEngine.getActiveTenantId();
+    const offeredGross = params.offeredGrossSalary || (params.offeredCtc ? Math.round(params.offeredCtc / 13.2) : 60000);
+
     const newInvite: OnboardingInvite = {
       id: `onb-${Date.now()}`,
-      organizationId: StorageEngine.getActiveTenantId(),
+      organizationId: orgId,
       token,
       candidateName: params.candidateName,
-      candidateEmail: params.candidateEmail,
-      candidatePhone: params.candidatePhone,
-      departmentId: params.departmentId,
-      designationId: params.designationId,
-      branchId: params.branchId,
-      expectedJoiningDate: params.expectedJoiningDate,
+      candidateEmail: email,
+      candidatePhone: phone,
+      departmentId: params.departmentId || 'dept-eng-01',
+      designationId: params.designationId || 'desig-01',
+      branchId: params.branchId || 'branch-delhi-01',
+      expectedJoiningDate: joiningDate,
       assignedShiftId: params.assignedShiftId || 'shift-gen-01',
-      offeredGrossSalary: params.offeredGrossSalary || 60000,
+      offeredGrossSalary: offeredGross,
       status: 'sent',
       createdAt: new Date().toISOString(),
       expiresAt: expiresAt.toISOString(),
@@ -185,5 +196,52 @@ export class OnboardingService {
     );
 
     return { success: true, message: `Onboarding approved! Employee created with code ${employeeCode}.`, employee: newEmployee };
+  }
+
+  public static convertToEmployee(
+    inviteId: string,
+    reviewerEmployeeId: string = 'user-001'
+  ): { success: boolean; message: string; employee?: Employee } {
+    const invite = this.getById(inviteId);
+    if (!invite) return { success: false, message: 'Invite not found.' };
+
+    if (!invite.submittedData) {
+      invite.submittedData = {
+        firstName: invite.candidateName.split(' ')[0],
+        lastName: invite.candidateName.split(' ').slice(1).join(' ') || 'Candidate',
+        personalEmail: invite.candidateEmail,
+        dob: '1995-01-01',
+        gender: 'Male',
+        bloodGroup: 'O+',
+        currentAddress: 'Corporate HQ Guest Accommodation',
+        permanentAddress: 'Corporate HQ Guest Accommodation',
+        bankDetails: {
+          accountHolderName: invite.candidateName,
+          accountNumber: '9182000000000',
+          bankName: 'HDFC Bank Ltd.',
+          ifscCode: 'HDFC0001234',
+          branchName: 'Corporate Hub',
+        },
+        statutoryDetails: {
+          pan: 'ABCDE9999Z',
+          aadhaar: 'XXXX-XXXX-9999',
+          pfEligible: true,
+          esiEligible: false,
+          professionalTaxState: 'Telangana',
+        },
+        emergencyContact: {
+          name: 'Next of Kin',
+          relationship: 'Family',
+          phone: invite.candidatePhone,
+        },
+        documents: [],
+      };
+      StorageEngine.update<OnboardingInvite>(STORAGE_KEYS.ONBOARDING_INVITES, inviteId, {
+        submittedData: invite.submittedData,
+        status: 'submitted',
+      });
+    }
+
+    return this.approveOnboarding(inviteId, reviewerEmployeeId);
   }
 }

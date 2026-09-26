@@ -8,6 +8,22 @@ export class AuthService {
     return StorageEngine.getList<User>(STORAGE_KEYS.USERS);
   }
 
+  public static createUser(user: Partial<User> & { organizationId: string; email: string; fullName: string; roleName: User['roleName'] }): User {
+    const newUser: User = {
+      id: user.id || `user-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      organizationId: user.organizationId,
+      employeeId: user.employeeId || `emp-${Date.now()}`,
+      email: user.email,
+      fullName: user.fullName,
+      roleId: user.roleId || `role-${user.roleName.toLowerCase().replace(/\s+/g, '-')}`,
+      roleName: user.roleName,
+      avatar: user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      status: user.status || 'active',
+      lastLogin: user.lastLogin || new Date().toISOString(),
+    };
+    return StorageEngine.insert<User>(STORAGE_KEYS.USERS, newUser);
+  }
+
   public static getRoles(): Role[] {
     return StorageEngine.getList<Role>(STORAGE_KEYS.ROLES);
   }
@@ -109,6 +125,31 @@ export class AuthService {
     StorageEngine.setActiveTenantId('NP-000001');
     StorageEngine.set(STORAGE_KEYS.CURRENT_USER_ID, superAdminUserId);
     StorageEngine.setAppEnvironment('super_admin');
+  }
+
+  public static startImpersonation(
+    superAdminUserId: string,
+    superAdminName: string,
+    tenantId: string,
+    companyName?: string,
+    reason: string = 'Super Admin Administrative Access'
+  ): AdminImpersonationSession {
+    const superAdminUser: User = {
+      id: superAdminUserId,
+      fullName: superAdminName,
+      email: 'admin@novapulse.co.in',
+      roleName: 'Super Admin',
+      roleId: 'role-super-admin',
+      organizationId: 'NP-000001',
+      employeeId: 'emp-001',
+      avatar: '/logo.png',
+      status: 'active',
+    };
+    return this.loginAsClient(tenantId, superAdminUser, reason).session;
+  }
+
+  public static endImpersonation(superAdminUserId: string = 'user-001'): void {
+    this.exitAdminMode(superAdminUserId);
   }
 
   public static getUserPermissions(roleIdOrName: string): Record<string, PermissionSet> {

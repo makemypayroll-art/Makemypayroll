@@ -131,7 +131,7 @@ export class PayrollReimbursementService {
     tenantId?: string
   ): { totalReimbursements: number; claims: EmployeeReimbursement[] } {
     const approvedClaims = this.getByEmployee(employeeId, tenantId).filter(
-      r => r.status === 'Approved' && r.payoutMethod === 'Payroll' && !r.paidPayrollPeriodId
+      r => r.status === 'Approved' && (r.payoutMethod === 'Payroll' || (r.payoutMethod as any) === 'Payroll Payout') && !r.paidPayrollPeriodId
     );
 
     let totalReimbursements = 0;
