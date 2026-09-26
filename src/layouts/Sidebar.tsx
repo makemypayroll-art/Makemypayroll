@@ -122,6 +122,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: null,
     },
     {
+      id: 'insights',
+      name: 'MMP Insights',
+      icon: <Sparkles className="w-5 h-5 text-purple-400" />,
+      moduleKey: 'insights',
+      badge: 'AI',
+      badgeColor: 'bg-purple-600 text-white font-bold',
+    },
+    {
       id: 'settings',
       name: 'Settings & Admin',
       icon: <Settings className="w-5 h-5" />,

@@ -685,6 +685,8 @@ export interface PayslipEarnings {
   overtimePay: number;
   incentives: number;
   bonus: number;
+  leaveEncashment?: number;
+  reimbursements?: number;
   otherAllowances: number;
   totalGross: number;
 }
@@ -696,6 +698,8 @@ export interface PayslipDeductions {
   tds: number;
   lopDeduction: number;
   loanAdvanceDeduction: number;
+  loanEmi?: number;
+  advanceRecovery?: number;
   otherDeductions: number;
   totalDeductions: number;
 }
@@ -703,12 +707,18 @@ export interface PayslipDeductions {
 export interface PayslipEmployerContrib {
   pfEmployer: number;
   esiEmployer: number;
+  epsEmployer?: number;
+  epfEmployer?: number;
+  edliEmployer?: number;
+  pfAdminCharges?: number;
 }
 
 export interface Payslip {
   id: string;
   organizationId: string;
+  tenantId?: string;
   payrollPeriodId: string;
+  referenceNumber?: string;
   employeeId: string;
   employeeCode: string;
   employeeName: string;
@@ -720,6 +730,7 @@ export interface Payslip {
   ifscCode: string;
   pan: string;
   uan?: string;
+  esiNumber?: string;
   month: number;
   year: number;
   
@@ -742,6 +753,395 @@ export interface Payslip {
   paymentDate?: string;
   paymentReference?: string;
   generatedAt: string;
+}
+
+// -------------------------------------------------------------
+// ADVANCED PAYROLL STATUTORY, TAX, LOANS & ADVANCES
+// -------------------------------------------------------------
+
+export interface PayrollStatutoryConfig {
+  id: string;
+  tenantId: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  // PF Configuration
+  pfEnabled: boolean;
+  pfWageCeiling: number; // default 15000
+  pfEmployeeRate: number; // 12%
+  pfEmployerEpfRate: number; // 3.67%
+  pfEmployerEpsRate: number; // 8.33% (capped at ceiling)
+  pfAdminRate: number; // 0.5%
+  pfEdliRate: number; // 0.5%
+  // ESI Configuration
+  esiEnabled: boolean;
+  esiGrossWageThreshold: number; // default 21000
+  esiEmployeeRate: number; // 0.75%
+  esiEmployerRate: number; // 3.25%
+  // Tax / TDS Configuration
+  standardDeductionNew: number; // 75000
+  standardDeductionOld: number; // 50000
+  cessRate: number; // 4%
+  // Leave Encashment
+  leaveEncashmentBasis: 'BASIC' | 'BASIC_DA' | 'GROSS';
+  minLeaveBalanceForEncashment: number;
+  maxEncashableDaysPerYear: number;
+  // Overtime
+  overtimeMultiplier: number; // 1.5x or 2.0x
+  overtimeBasis: 'HOURLY_GROSS' | 'HOURLY_BASIC' | 'FIXED_HOURLY';
+  fixedHourlyRate?: number;
+  updatedAt: string;
+}
+
+export type TaxRegime = 'NEW' | 'OLD';
+
+export interface EmployeeTaxProfile {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  financialYear: string; // "2026-2027"
+  pan: string;
+  regime: TaxRegime;
+  declarationStatus: 'DRAFT' | 'SUBMITTED' | 'VERIFIED' | 'LOCKED';
+  section80CDeclared: number; // max 150000
+  section80DDeclared: number; // Mediclaim
+  hraExemptionDeclared: number;
+  homeLoanInterestDeclared: number; // Section 24
+  otherExemptionsDeclared: number;
+  previousEmployerGross: number;
+  previousEmployerTds: number;
+  annualGrossProjected: number;
+  totalTaxableIncome: number;
+  annualTaxLiability: number;
+  tdsAlreadyDeducted: number;
+  monthlyTdsToDeduct: number;
+  updatedAt: string;
+}
+
+export interface EmployeePfProfile {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  pfApplicable: boolean;
+  uan?: string;
+  pfMemberId?: string;
+  voluntaryPfPercent?: number;
+  isEpsEligible: boolean;
+  updatedAt: string;
+}
+
+export interface EmployeeEsiProfile {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  esiApplicable: boolean;
+  esiNumber?: string;
+  isEligible: boolean;
+  updatedAt: string;
+}
+
+export type LoanStatus =
+  | 'Draft'
+  | 'Pending Approval'
+  | 'Approved'
+  | 'Disbursed'
+  | 'Active'
+  | 'Completed'
+  | 'Paused'
+  | 'Rejected'
+  | 'Cancelled';
+
+export interface EmployeeLoan {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  employeeName?: string;
+  loanType: 'Personal Loan' | 'Emergency Aid' | 'Home / Vehicle Loan' | 'Education Support' | 'Festival Loan';
+  principalAmount: number;
+  interestRateAnnualPercent: number; // 0 for interest-free
+  tenureMonths: number;
+  monthlyEmi: number;
+  startMonth: string; // "YYYY-MM"
+  endMonth: string;   // "YYYY-MM"
+  outstandingPrincipal: number;
+  outstandingInterest: number;
+  emisPaidCount: number;
+  status: LoanStatus;
+  approvalDate?: string;
+  approvedBy?: string;
+  disbursementDate?: string;
+  rejectionReason?: string;
+  isDeductionPaused?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeAdvance {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  employeeName?: string;
+  advanceAmount: number;
+  requestDate: string;
+  reason: string;
+  approvedAmount: number;
+  recoveryStartMonth: string; // "YYYY-MM"
+  recoveryMonthlyAmount: number;
+  installmentsCount: number;
+  installmentsRecoveredCount: number;
+  outstandingAmount: number;
+  status: 'Pending' | 'Approved' | 'Active' | 'Recovered' | 'Rejected';
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ReimbursementType = 'Travel' | 'Food' | 'Medical' | 'Mobile' | 'Internet' | 'Fuel' | 'Other';
+export type ReimbursementStatus = 'Submitted' | 'Manager Approved' | 'HR Approved' | 'Approved' | 'Paid' | 'Rejected';
+
+export interface EmployeeReimbursement {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  employeeName?: string;
+  expenseType: ReimbursementType;
+  expenseDate: string;
+  amount: number;
+  description: string;
+  receiptUrl?: string;
+  receiptFileName?: string;
+  status: ReimbursementStatus;
+  payoutMethod: 'Payroll' | 'Direct Transfer';
+  approvedAmount?: number;
+  managerApprovedBy?: string;
+  managerApprovedAt?: string;
+  hrApprovedBy?: string;
+  hrApprovedAt?: string;
+  rejectionReason?: string;
+  paidPayrollPeriodId?: string;
+  paidDate?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeaveEncashmentRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  employeeName?: string;
+  leaveTypeId: string;
+  leaveTypeName: string;
+  eligibleBalanceDays: number;
+  encashedDays: number;
+  calculationBasis: 'BASIC' | 'BASIC_DA' | 'GROSS';
+  perDayRate: number;
+  encashmentAmount: number;
+  status: 'Pending' | 'Approved' | 'Processed' | 'Rejected';
+  payrollPeriodId?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+}
+
+export interface EmployeeOvertimeRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  employeeName?: string;
+  date: string;
+  otHours: number;
+  hourlyRate: number;
+  multiplier: number;
+  otAmount: number;
+  attendanceRecordId?: string;
+  shiftId?: string;
+  status: 'Pending' | 'Approved' | 'Processed' | 'Rejected';
+  payrollPeriodId?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  createdAt: string;
+}
+
+// -------------------------------------------------------------
+// MMP INSIGHTS — AI WORKFORCE INTELLIGENCE DATA MODELS
+// -------------------------------------------------------------
+
+export type MMPDatasetStatus = 'PROCESSING' | 'READY' | 'ERROR' | 'ARCHIVED';
+
+export interface MMPColumnMapping {
+  employeeIdentifier: string;
+  employeeName: string;
+  department: string;
+  date: string;
+  workingHours: string;
+  productiveHours: string;
+  overtimeHours: string;
+  taskCount?: string;
+  completedTasks?: string;
+  attendanceStatus?: string;
+  performanceScore?: string;
+}
+
+export interface MMPDataset {
+  id: string;
+  tenantId: string;
+  userId: string;
+  userName: string;
+  fileName: string;
+  fileType: 'xlsx' | 'xls' | 'csv' | 'internal_hrms';
+  rowCount: number;
+  columnCount: number;
+  detectedColumns: string[];
+  columnMapping: MMPColumnMapping;
+  dataSummary: {
+    departmentsCount: number;
+    employeesCount: number;
+    dateRange: { from: string; to: string };
+    missingValuesCount: number;
+    duplicateRowsCount: number;
+    invalidValuesCount: number;
+  };
+  status: MMPDatasetStatus;
+  createdAt: string;
+}
+
+export interface MMPDatasetRow {
+  id: string;
+  datasetId: string;
+  tenantId: string;
+  employeeIdentifier: string;
+  employeeName: string;
+  department: string;
+  date: string;
+  workingHours: number;
+  productiveHours: number;
+  overtimeHours: number;
+  taskCount: number;
+  completedTasks: number;
+  attendanceStatus: string;
+  performanceScore?: number;
+  rawData?: Record<string, any>;
+}
+
+export interface MMPAnalyticsMetrics {
+  totalEmployees: number;
+  activeEmployees: number;
+  attendanceRatePercent: number;
+  absenteeismRatePercent: number;
+  avgWorkingHours: number;
+  avgProductiveHours: number;
+  productivityRatioPercent: number; // (Productive / Working) * 100
+  totalOvertimeHours: number;
+  overtimeRatePercent: number;
+  taskCompletionRatePercent: number;
+  productivityScore: number; // 0 to 100 transparent formula
+  scoreFormulaDescription: string;
+  departmentMetrics: Array<{
+    department: string;
+    employeeCount: number;
+    attendanceRate: number;
+    avgWorkingHours: number;
+    avgProductiveHours: number;
+    productivityRatio: number;
+    overtimeHours: number;
+    taskCompletionRate: number;
+    productivityScore: number;
+  }>;
+  employeeTopProductivity: Array<{
+    employeeName: string;
+    department: string;
+    productivityRatio: number;
+    score: number;
+    attendanceRate: number;
+  }>;
+  employeeDecliningTrend: Array<{
+    employeeName: string;
+    department: string;
+    previousPeriodRatio: number;
+    currentPeriodRatio: number;
+    deltaPercent: number;
+  }>;
+  anomalies: Array<{
+    type: 'HIGH_ATTENDANCE_LOW_OUTPUT' | 'EXCESSIVE_OVERTIME' | 'PRODUCTIVITY_DROP' | 'TASK_BOTTLENECK';
+    severity: 'LOW' | 'MEDIUM' | 'HIGH';
+    title: string;
+    description: string;
+    affectedCount: number;
+  }>;
+  periodComparison?: {
+    currentPeriod: string;
+    previousPeriod: string;
+    productivityDelta: number;
+    attendanceDelta: number;
+    overtimeDelta: number;
+  };
+}
+
+export interface MMPAIInsightItem {
+  type: 'FACT' | 'OBSERVATION' | 'POSSIBLE_EXPLANATION' | 'RECOMMENDATION';
+  category: 'PRODUCTIVITY' | 'ATTENDANCE' | 'OVERTIME' | 'WORKLOAD' | 'RISK';
+  title: string;
+  description: string;
+  metricReference?: string;
+}
+
+export interface MMPAIAnalysis {
+  id: string;
+  tenantId: string;
+  datasetId: string;
+  prompt: string;
+  executiveSummary: string;
+  keyInsights: MMPAIInsightItem[];
+  areasToInvestigate: string[];
+  recommendedActions: string[];
+  dataLimitations: string[];
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  createdAt: string;
+}
+
+export interface MMPSavedInsight {
+  id: string;
+  tenantId: string;
+  userId: string;
+  userName: string;
+  title: string;
+  prompt: string;
+  analysis: MMPAIAnalysis;
+  metrics: MMPAnalyticsMetrics;
+  datasetName: string;
+  dataPeriod: string;
+  tags: string[];
+  createdAt: string;
+}
+
+export interface MMPAIUsage {
+  id: string;
+  tenantId: string;
+  userId: string;
+  monthYear: string; // "2026-09"
+  requestCount: number;
+  monthlyLimit: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostUSD: number;
+  lastRequestAt: string;
+}
+
+export interface MMPAISettings {
+  id: string;
+  tenantId: string;
+  isAiEnabled: boolean;
+  defaultProvider: 'openai' | 'anthropic' | 'makemypayroll_engine';
+  defaultModel: string;
+  monthlyRequestLimit: number; // default 100
+  dailyRequestLimit: number;   // default 20
+  maxFileSizeMB: number;       // default 10
+  maxRows: number;             // default 5000
+  allowedRoles: string[];      // ['Super Admin', 'Tenant Admin', 'HR Admin', 'Manager']
+  updatedAt: string;
 }
 
 // -------------------------------------------------------------

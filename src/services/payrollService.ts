@@ -1,4 +1,8 @@
-// Payroll & Statutory Tax Compliance Engine (India-Ready)
+// ====================================================================
+// NovaPulse / MakeMyPayroll — Master Payroll Management Service
+// Full Indian Statutory Compliance (PF, ESI, TDS, Loans, Advances, Overtime, Encashments)
+// ====================================================================
+
 import { StorageEngine, STORAGE_KEYS } from '../database/storageEngine';
 import {
   PayrollPeriod,
@@ -13,19 +17,33 @@ import { EmployeeService } from './employeeService';
 import { AttendanceService } from './attendanceService';
 import { LeaveService } from './leaveService';
 import { AuditService } from './auditService';
+import { PayrollStatutoryService } from './payroll/payrollStatutoryService';
+import { PayrollCalculationService, EmployeeSalaryBreakup } from './payroll/payrollCalculationService';
+import { PayrollLoanService } from './payroll/payrollLoanService';
+import { PayrollAdvanceService } from './payroll/payrollAdvanceService';
+import { PayrollReimbursementService } from './payroll/payrollReimbursementService';
+import { PayrollOvertimeService, PayrollEncashmentService } from './payroll/payrollOvertimeService';
 
 export class PayrollService {
-  public static getPeriods(): PayrollPeriod[] {
-    return StorageEngine.getList<PayrollPeriod>(STORAGE_KEYS.PAYROLL_PERIODS);
+  public static getPeriods(tenantId?: string): PayrollPeriod[] {
+    const list = StorageEngine.getList<PayrollPeriod>(STORAGE_KEYS.PAYROLL_PERIODS);
+    return tenantId ? list.filter(p => p.organizationId === tenantId || (p as any).tenantId === tenantId) : list;
   }
 
   public static getPeriodById(id: string): PayrollPeriod | undefined {
     return this.getPeriods().find(p => p.id === id);
   }
 
-  public static getPayslips(periodId?: string): Payslip[] {
+  public static getPayslips(periodId?: string, tenantId?: string): Payslip[] {
     const list = StorageEngine.getList<Payslip>(STORAGE_KEYS.PAYSLIPS);
-    return periodId ? list.filter(p => p.payrollPeriodId === periodId) : list;
+    let filtered = list;
+    if (periodId) {
+      filtered = filtered.filter(p => p.payrollPeriodId === periodId);
+    }
+    if (tenantId) {
+      filtered = filtered.filter(p => p.organizationId === tenantId || p.tenantId === tenantId);
+    }
+    return filtered;
   }
 
   public static getEmployeePayslips(employeeId: string): Payslip[] {
@@ -36,44 +54,57 @@ export class PayrollService {
     return this.getPayslips().find(p => p.id === id);
   }
 
-  /**
-   * Converts number to Indian Currency Words (e.g. 1,45,200 -> "One Lakh Forty-Five Thousand Two Hundred Rupees Only")
-   */
   public static numberToWordsINR(num: number): string {
-    if (num <= 0) return 'Zero Rupees Only';
-    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-    const inWords = (n: number): string => {
-      if (n < 20) return a[n];
-      if (n < 100) return b[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + a[n % 10] : '');
-      if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' ' + inWords(n % 100) : '');
-      if (n < 100000) return inWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 !== 0 ? ' ' + inWords(n % 1000) : '');
-      if (n < 10000000) return inWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 !== 0 ? ' ' + inWords(n % 100000) : '');
-      return inWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 !== 0 ? ' ' + inWords(n % 10000000) : '');
-    };
-
-    return `${inWords(Math.round(num))} Rupees Only`;
+    return PayrollCalculationService.numberToWordsINR(num);
   }
 
   /**
-   * Run Monthly Payroll Calculation
+   * Preview salary calculation for an individual employee without saving
+   */
+  public static previewEmployeeSalary(
+    employeeId: string,
+    month: number = new Date().getMonth() + 1,
+    year: number = new Date().getFullYear()
+  ): EmployeeSalaryBreakup | undefined {
+    const employee = EmployeeService.getById(employeeId);
+    if (!employee) return undefined;
+
+    return PayrollCalculationService.calculateEmployeeMonthlyPay({
+      employee,
+      month,
+      year,
+      applyLiveDeductions: false,
+    });
+  }
+
+  /**
+   * Run Monthly Payroll Calculation Engine across all active employees
    */
   public static processMonthlyPayroll(params: {
     month: number;
     year: number;
     processedByUserId: string;
+    tenantId?: string;
   }): { period: PayrollPeriod; payslips: Payslip[] } {
+    const tenantId = params.tenantId || StorageEngine.getActiveTenantId() || 'NP-000001';
     const periodId = `pay-${params.year}-${params.month.toString().padStart(2, '0')}`;
     const totalWorkingDays = 26; // Standard monthly working days
 
-    const employees = EmployeeService.getAll().filter(e => e.employmentStatus === 'Active');
+    // Check if payroll period is already locked
+    const existingPeriod = this.getPeriodById(periodId);
+    if (existingPeriod && existingPeriod.status === 'Finalized') {
+      throw new Error(`Payroll period ${periodId} is locked and finalized. Unlock/reopen before recalculating.`);
+    }
+
+    let employees = EmployeeService.getAll().filter(
+      e => (e.organizationId === tenantId || (e as any).tenantId === tenantId || (tenantId === 'NP-000001' && e.organizationId === 'org-novapulse-01')) && e.employmentStatus === 'Active'
+    );
+    if (employees.length === 0) {
+      employees = EmployeeService.getAll().filter(e => e.employmentStatus === 'Active');
+    }
     const branches = StorageEngine.getList<Branch>(STORAGE_KEYS.BRANCHES);
     const departments = StorageEngine.getList<Department>(STORAGE_KEYS.DEPARTMENTS);
     const designations = StorageEngine.getList<Designation>(STORAGE_KEYS.DESIGNATIONS);
-    const systemSettings = StorageEngine.get(STORAGE_KEYS.SYSTEM_SETTINGS, {
-      payroll: { pfCeilingAmount: 15000, pfEmployeeRatePercent: 12, pfEmployerRatePercent: 12, esiWageThreshold: 21000, esiEmployeeRatePercent: 0.75, esiEmployerRatePercent: 3.25 },
-    });
 
     const payslips: Payslip[] = [];
     let totalGrossAll = 0;
@@ -85,148 +116,41 @@ export class PayrollService {
       const dept = departments.find(d => d.id === emp.departmentId);
       const desig = designations.find(d => d.id === emp.designationId);
 
-      // Analyze attendance & leaves for that month
-      const startMonth = `${params.year}-${params.month.toString().padStart(2, '0')}-01`;
-      const endMonth = `${params.year}-${params.month.toString().padStart(2, '0')}-31`;
-      const empAttendance = AttendanceService.getAll().filter(
-        a => a.employeeId === emp.id && a.date >= startMonth && a.date <= endMonth
-      );
-
-      // Compute days
-      let presentDays = 0;
-      let halfDays = 0;
-      let paidLeaveDays = 0;
-      let lopDays = 0;
-
-      empAttendance.forEach(a => {
-        if (a.status === 'Present' || a.status === 'Late Arrival' || a.status === 'Work From Home' || a.status === 'On Duty') {
-          presentDays += 1;
-        } else if (a.status === 'Half-Day') {
-          halfDays += 1;
-        } else if (a.status === 'Leave') {
-          paidLeaveDays += 1;
-        } else if (a.status === 'Absent') {
-          lopDays += 1;
-        }
-      });
-
-      // Include half-days
-      const effectivePresent = presentDays + halfDays * 0.5;
-      const paymentDays = Math.min(totalWorkingDays, effectivePresent + paidLeaveDays + 4); // + 4 weekly offs
-      const finalLopDays = Math.max(0, totalWorkingDays - paymentDays);
-
-      const gross = emp.salaryStructure.grossSalary || 50000;
-      const basic = emp.salaryStructure.basicSalary || Math.round(gross * 0.5);
-      const hra = emp.salaryStructure.hra || Math.round(gross * 0.25);
-      const conv = emp.salaryStructure.conveyanceAllowance || 4000;
-      const special = emp.salaryStructure.specialAllowance || Math.max(0, gross - (basic + hra + conv));
-
-      // LOP Deduction formula
-      const perDaySalary = gross / totalWorkingDays;
-      const lopDeduction = Math.round(finalLopDays * perDaySalary);
-
-      // Provident Fund
-      let pfEmployee = 0;
-      let pfEmployer = 0;
-      if (emp.statutoryDetails.pfEligible) {
-        const pfWage = Math.min(basic, systemSettings.payroll.pfCeilingAmount || 15000);
-        pfEmployee = Math.round((pfWage * (systemSettings.payroll.pfEmployeeRatePercent || 12)) / 100);
-        pfEmployer = Math.round((pfWage * (systemSettings.payroll.pfEmployerRatePercent || 12)) / 100);
-      }
-
-      // ESI
-      let esiEmployee = 0;
-      let esiEmployer = 0;
-      if (emp.statutoryDetails.esiEligible && gross <= (systemSettings.payroll.esiWageThreshold || 21000)) {
-        esiEmployee = Math.round((gross * (systemSettings.payroll.esiEmployeeRatePercent || 0.75)) / 100);
-        esiEmployer = Math.round((gross * (systemSettings.payroll.esiEmployerRatePercent || 3.25)) / 100);
-      }
-
-      // Professional Tax (State slab)
-      let professionalTax = 200; // Standard monthly
-      if (branch?.state === 'Maharashtra') professionalTax = 200;
-      if (branch?.state === 'Karnataka') professionalTax = 200;
-
-      // TDS Estimate
-      let tds = 0;
-      if (gross > 100000) tds = Math.round(gross * 0.1);
-      else if (gross > 60000) tds = Math.round(gross * 0.05);
-
-      const totalDeductions = lopDeduction + pfEmployee + esiEmployee + professionalTax + tds;
-      const netSalary = Math.max(0, gross - totalDeductions);
-
-      totalGrossAll += gross;
-      totalDeductionsAll += totalDeductions;
-      totalNetAll += netSalary;
-
-      const payslip: Payslip = {
-        id: `ps-${periodId}-${emp.id}`,
-        organizationId: StorageEngine.getActiveTenantId(),
-        payrollPeriodId: periodId,
-        employeeId: emp.id,
-        employeeCode: emp.employeeCode,
-        employeeName: `${emp.firstName} ${emp.lastName}`,
-        departmentName: dept?.name || 'General',
-        designationName: desig?.title || 'Associate',
-        branchName: branch?.name || 'Main Office',
-        bankAccount: emp.bankDetails.accountNumber,
-        bankName: emp.bankDetails.bankName,
-        ifscCode: emp.bankDetails.ifscCode,
-        pan: emp.statutoryDetails.pan,
-        uan: emp.statutoryDetails.uan,
+      // Execute canonical calculation engine pipeline
+      const breakup = PayrollCalculationService.calculateEmployeeMonthlyPay({
+        employee: emp,
         month: params.month,
         year: params.year,
         totalWorkingDays,
-        paymentDays,
-        presentDays: effectivePresent,
-        lopDays: finalLopDays,
-        paidLeaveDays,
-        weeklyOffDays: 4,
-        holidayDays: 1,
-        overtimeHours: 0,
-        earnings: {
-          basicSalary: basic,
-          hra: hra,
-          conveyanceAllowance: conv,
-          specialAllowance: special,
-          medicalAllowance: emp.salaryStructure.medicalAllowance || 0,
-          overtimePay: 0,
-          incentives: 0,
-          bonus: 0,
-          otherAllowances: 0,
-          totalGross: gross,
-        },
-        deductions: {
-          pfEmployee,
-          esiEmployee,
-          professionalTax,
-          tds,
-          lopDeduction,
-          loanAdvanceDeduction: 0,
-          otherDeductions: 0,
-          totalDeductions,
-        },
-        employerContributions: {
-          pfEmployer,
-          esiEmployer,
-        },
-        netSalary,
-        netSalaryInWords: this.numberToWordsINR(netSalary),
-        status: 'Calculated',
-        generatedAt: new Date().toISOString(),
-      };
+        tenantId,
+        applyLiveDeductions: true,
+        periodId,
+      });
+
+      const payslip = PayrollCalculationService.generatePayslip(breakup, {
+        periodId,
+        month: params.month,
+        year: params.year,
+        branch,
+        department: dept,
+        designation: desig,
+        tenantId,
+      });
 
       payslips.push(payslip);
+      totalGrossAll += payslip.earnings.totalGross;
+      totalDeductionsAll += payslip.deductions.totalDeductions;
+      totalNetAll += payslip.netSalary;
     });
 
-    const periodRecord: PayrollPeriod = {
+    const newPeriod: PayrollPeriod = {
       id: periodId,
-      organizationId: StorageEngine.getActiveTenantId(),
+      organizationId: tenantId,
       month: params.month,
       year: params.year,
       totalWorkingDays,
       status: 'Calculated',
-      processedDate: new Date().toISOString(),
+      processedDate: new Date().toISOString().split('T')[0],
       processedByUserId: params.processedByUserId,
       totalEmployees: employees.length,
       totalGrossPay: totalGrossAll,
@@ -234,43 +158,129 @@ export class PayrollService {
       totalNetPay: totalNetAll,
     };
 
-    // Upsert Period & Payslips
-    StorageEngine.insert<PayrollPeriod>(STORAGE_KEYS.PAYROLL_PERIODS, periodRecord);
-    
-    const existingPayslips = StorageEngine.getList<Payslip>(STORAGE_KEYS.PAYSLIPS).filter(
+    // Save period and payslips
+    StorageEngine.upsert<PayrollPeriod>(STORAGE_KEYS.PAYROLL_PERIODS, newPeriod);
+
+    // Remove existing draft payslips for this period before writing updated ones
+    const allPayslips = StorageEngine.getList<Payslip>(STORAGE_KEYS.PAYSLIPS).filter(
       p => p.payrollPeriodId !== periodId
     );
-    StorageEngine.setList(STORAGE_KEYS.PAYSLIPS, [...existingPayslips, ...payslips]);
+    StorageEngine.set<Payslip[]>(STORAGE_KEYS.PAYSLIPS, [...allPayslips, ...payslips]);
 
-    AuditService.log(
-      'PROCESS',
-      'Payroll Management',
-      `Calculated monthly payroll for ${periodId} (${employees.length} employees, Net Pay: ₹${totalNetAll.toLocaleString('en-IN')})`,
-      { id: params.processedByUserId, name: 'Payroll Admin', role: 'Payroll Admin' },
-      { recordId: periodId }
-    );
+    // Audit log
+    AuditService.log({
+      userId: params.processedByUserId,
+      userName: 'HR / Payroll Admin',
+      userRole: 'HR Admin',
+      module: 'Payroll Management',
+      action: 'PROCESS',
+      description: `Processed monthly payroll for period ${periodId} (${employees.length} employees). Gross: ₹${totalGrossAll.toLocaleString('en-IN')}, Net: ₹${totalNetAll.toLocaleString('en-IN')}`,
+      recordId: periodId,
+    });
 
-    return { period: periodRecord, payslips };
+    return { period: newPeriod, payslips };
   }
 
-  public static updatePeriodStatus(periodId: string, status: PayrollStatus): PayrollPeriod | undefined {
+  /**
+   * Update Payroll Period Status (Workflow: Draft -> Calculated -> Under Review -> Approved -> Finalized -> Paid)
+   */
+  public static updatePeriodStatus(periodId: string, status: PayrollStatus, updatedBy: string = 'Super Admin'): PayrollPeriod | undefined {
+    const period = this.getPeriodById(periodId);
+    if (!period) return undefined;
+
     const updated = StorageEngine.update<PayrollPeriod>(STORAGE_KEYS.PAYROLL_PERIODS, periodId, {
       status,
+      processedDate: new Date().toISOString().split('T')[0],
     });
 
-    // Update all payslips for this period
-    const allPayslips = StorageEngine.getList<Payslip>(STORAGE_KEYS.PAYSLIPS);
-    allPayslips.forEach(p => {
+    // Update individual payslips status to match
+    const payslips = StorageEngine.getList<Payslip>(STORAGE_KEYS.PAYSLIPS);
+    const updatedPayslips = payslips.map(p => {
       if (p.payrollPeriodId === periodId) {
-        p.status = status;
-        if (status === 'Paid') {
-          p.paymentDate = new Date().toISOString().split('T')[0];
-          p.paymentReference = `NEFT-${Date.now()}`;
-        }
+        return { ...p, status };
       }
+      return p;
     });
-    StorageEngine.setList(STORAGE_KEYS.PAYSLIPS, allPayslips);
+    StorageEngine.set<Payslip[]>(STORAGE_KEYS.PAYSLIPS, updatedPayslips);
+
+    AuditService.log({
+      userId: 'user-001',
+      userName: updatedBy,
+      userRole: 'HR Admin',
+      module: 'Payroll Management',
+      action: 'UPDATE',
+      description: `Updated payroll period ${periodId} status to '${status}'`,
+      recordId: periodId,
+      previousValue: period.status,
+      newValue: status,
+    });
 
     return updated;
+  }
+
+  /**
+   * Lock Payroll Period
+   */
+  public static lockPeriod(periodId: string, lockedBy: string = 'Super Admin'): PayrollPeriod | undefined {
+    return this.updatePeriodStatus(periodId, 'Finalized', lockedBy);
+  }
+
+  /**
+   * Reopen Payroll Period (Requires Admin authorization)
+   */
+  public static reopenPeriod(periodId: string, reopenedBy: string = 'Super Admin', reason: string = 'Administrative review'): PayrollPeriod | undefined {
+    const period = this.getPeriodById(periodId);
+    if (!period) return undefined;
+
+    const updated = StorageEngine.update<PayrollPeriod>(STORAGE_KEYS.PAYROLL_PERIODS, periodId, {
+      status: 'Under Review',
+    });
+
+    AuditService.log({
+      userId: 'user-001',
+      userName: reopenedBy,
+      userRole: 'Super Admin',
+      module: 'Payroll Management',
+      action: 'UPDATE',
+      description: `Reopened locked payroll period ${periodId}. Reason: ${reason}`,
+      recordId: periodId,
+      previousValue: period.status,
+      newValue: 'Under Review',
+    });
+
+    return updated;
+  }
+
+  /**
+   * Overall Payroll Statistics Summary
+   */
+  public static getPayrollSummary(tenantId?: string) {
+    const periods = this.getPeriods(tenantId);
+    const payslips = this.getPayslips(undefined, tenantId);
+
+    const totalGross = periods.reduce((acc, p) => acc + (p.totalGrossPay || 0), 0);
+    const totalNet = periods.reduce((acc, p) => acc + (p.totalNetPay || 0), 0);
+    const totalDeductions = periods.reduce((acc, p) => acc + (p.totalDeductions || 0), 0);
+
+    const totalPF = payslips.reduce((acc, p) => acc + (p.deductions.pfEmployee || 0), 0);
+    const totalESI = payslips.reduce((acc, p) => acc + (p.deductions.esiEmployee || 0), 0);
+    const totalTDS = payslips.reduce((acc, p) => acc + (p.deductions.tds || 0), 0);
+    const totalOT = payslips.reduce((acc, p) => acc + (p.earnings.overtimePay || 0), 0);
+    const totalReimbursements = payslips.reduce((acc, p) => acc + (p.earnings.reimbursements || 0), 0);
+    const totalLoanRecoveries = payslips.reduce((acc, p) => acc + (p.deductions.loanAdvanceDeduction || 0), 0);
+
+    return {
+      periodsCount: periods.length,
+      payslipsCount: payslips.length,
+      totalGross,
+      totalNet,
+      totalDeductions,
+      totalPF,
+      totalESI,
+      totalTDS,
+      totalOT,
+      totalReimbursements,
+      totalLoanRecoveries,
+    };
   }
 }

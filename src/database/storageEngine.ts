@@ -60,6 +60,20 @@ export const STORAGE_KEYS = {
   GEO_LOCATIONS: `${STORAGE_PREFIX}geo_locations`,
   PAYROLL_PERIODS: `${STORAGE_PREFIX}payroll_periods`,
   PAYSLIPS: `${STORAGE_PREFIX}payslips`,
+  PAYROLL_STATUTORY_CONFIG: `${STORAGE_PREFIX}payroll_statutory_config`,
+  EMPLOYEE_TAX_PROFILES: `${STORAGE_PREFIX}employee_tax_profiles`,
+  EMPLOYEE_PF_PROFILES: `${STORAGE_PREFIX}employee_pf_profiles`,
+  EMPLOYEE_ESI_PROFILES: `${STORAGE_PREFIX}employee_esi_profiles`,
+  EMPLOYEE_LOANS: `${STORAGE_PREFIX}employee_loans`,
+  EMPLOYEE_ADVANCES: `${STORAGE_PREFIX}employee_advances`,
+  EMPLOYEE_REIMBURSEMENTS: `${STORAGE_PREFIX}employee_reimbursements`,
+  LEAVE_ENCASHMENTS: `${STORAGE_PREFIX}leave_encashments`,
+  EMPLOYEE_OVERTIME: `${STORAGE_PREFIX}employee_overtime`,
+  MMP_DATASETS: `${STORAGE_PREFIX}mmp_datasets`,
+  MMP_DATASET_ROWS: `${STORAGE_PREFIX}mmp_dataset_rows`,
+  MMP_SAVED_INSIGHTS: `${STORAGE_PREFIX}mmp_saved_insights`,
+  MMP_AI_USAGE: `${STORAGE_PREFIX}mmp_ai_usage`,
+  MMP_AI_SETTINGS: `${STORAGE_PREFIX}mmp_ai_settings`,
   HOLIDAYS: `${STORAGE_PREFIX}holidays`,
   SYSTEM_SETTINGS: `${STORAGE_PREFIX}system_settings`,
   NOTIFICATIONS: `${STORAGE_PREFIX}notifications`,
@@ -237,6 +251,10 @@ export class StorageEngine {
     }
     this.setList(key, list);
     return item;
+  }
+
+  public static upsert<T extends { id: string }>(key: string, item: T): T {
+    return this.insert<T>(key, item);
   }
 
   public static update<T extends { id: string }>(key: string, id: string, updates: Partial<T>): T | undefined {
