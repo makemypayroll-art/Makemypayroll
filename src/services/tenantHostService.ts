@@ -12,10 +12,12 @@ import {
   isValidSlugFormat,
 } from './tenantResolver';
 
-export type TenantHostMode = 'platform' | 'tenant' | 'legacy' | 'development';
+export type TenantHostMode = 'admin' | 'tenant' | 'legacy' | 'platform' | 'development';
 
 export interface TenantHostContext {
   mode: TenantHostMode;
+  isAdminPortal: boolean;
+  isClientPortal: boolean;
   isRootDomain: boolean;
   apexDomain: string;
   subdomain?: string;
@@ -83,12 +85,12 @@ export class TenantHostService {
       return null;
     }
 
-    // Localhost subdomain: e.g. "ignite.localhost" -> "ignite"
+    // Localhost subdomain: e.g. "ignite.localhost" -> "ignite", "admin.localhost" -> "admin"
     if (host.endsWith('.localhost')) {
       const parts = host.split('.');
       if (parts.length >= 2) {
         const sub = normalizeSlug(parts[0]);
-        if (sub && !isReservedSlug(sub)) {
+        if (sub) {
           return sub;
         }
       }
@@ -108,7 +110,7 @@ export class TenantHostService {
         const prefix = host.slice(0, -(root.length + 1));
         const subParts = prefix.split('.');
         const candidate = normalizeSlug(subParts[subParts.length - 1]);
-        if (candidate && !isReservedSlug(candidate)) {
+        if (candidate) {
           return candidate;
         }
       }
@@ -118,7 +120,7 @@ export class TenantHostService {
     const parts = host.split('.');
     if (parts.length >= 3) {
       const candidate = normalizeSlug(parts[0]);
-      if (candidate && !isReservedSlug(candidate)) {
+      if (candidate) {
         return candidate;
       }
     }
@@ -138,8 +140,35 @@ export class TenantHostService {
     const pathTenant = this.extractPathTenant(pathname);
     const subdomain = this.extractSubdomain(host, platformDomain);
 
-    // 1. Tenant Subdomain Mode (*.makemypayroll.com or *.localhost)
+    // 1. Dedicated Admin Control Panel Portal X (admin.makemypayroll.com or admin.localhost)
+    if (subdomain === 'admin' || host === `admin.${platformDomain.toLowerCase()}` || host === 'admin.localhost') {
+      return {
+        mode: 'admin',
+        isAdminPortal: true,
+        isClientPortal: false,
+        isRootDomain: false,
+        apexDomain: platformDomain,
+        subdomain: 'admin',
+        tenant: null,
+        status: null,
+      };
+    }
+
+    // 2. Tenant Subdomain Mode (*.makemypayroll.com or *.localhost) -> Portal Y (Client HRMS)
     if (subdomain) {
+      if (isReservedSlug(subdomain)) {
+        return {
+          mode: 'platform',
+          isAdminPortal: false,
+          isClientPortal: false,
+          isRootDomain: true,
+          apexDomain: platformDomain,
+          subdomain,
+          tenant: null,
+          status: null,
+        };
+      }
+
       const tenant =
         TenantService.getBySubdomain(subdomain) ||
         TenantService.getBySlug(subdomain) ||
@@ -149,6 +178,8 @@ export class TenantHostService {
       if (tenant) {
         return {
           mode: 'tenant',
+          isAdminPortal: false,
+          isClientPortal: true,
           isRootDomain: false,
           apexDomain: platformDomain,
           subdomain,
@@ -161,6 +192,8 @@ export class TenantHostService {
       // Subdomain was requested but no matching organization exists
       return {
         mode: 'tenant',
+        isAdminPortal: false,
+        isClientPortal: true,
         isRootDomain: false,
         apexDomain: platformDomain,
         subdomain,
@@ -170,7 +203,7 @@ export class TenantHostService {
       };
     }
 
-    // 2. Legacy /t/:tenantId Route Mode
+    // 3. Legacy /t/:tenantId Route Mode
     if (pathTenant) {
       const tenant =
         TenantService.getById(pathTenant) ||
@@ -181,6 +214,8 @@ export class TenantHostService {
       if (tenant) {
         return {
           mode: 'legacy',
+          isAdminPortal: false,
+          isClientPortal: true,
           isRootDomain: false,
           apexDomain: platformDomain,
           pathTenantId: pathTenant,
@@ -192,6 +227,8 @@ export class TenantHostService {
 
       return {
         mode: 'legacy',
+        isAdminPortal: false,
+        isClientPortal: true,
         isRootDomain: false,
         apexDomain: platformDomain,
         pathTenantId: pathTenant,
@@ -201,7 +238,7 @@ export class TenantHostService {
       };
     }
 
-    // 3. Development Mode (raw localhost / 127.0.0.1)
+    // 4. Development Mode (raw localhost / 127.0.0.1)
     if (
       host === 'localhost' ||
       host === '127.0.0.1' ||
@@ -210,6 +247,8 @@ export class TenantHostService {
     ) {
       return {
         mode: 'development',
+        isAdminPortal: false,
+        isClientPortal: false,
         isRootDomain: true,
         apexDomain: 'localhost',
         tenant: null,
@@ -217,9 +256,11 @@ export class TenantHostService {
       };
     }
 
-    // 4. Platform Mode (makemypayroll.com, www.makemypayroll.com)
+    // 5. Platform Mode (makemypayroll.com, www.makemypayroll.com)
     return {
       mode: 'platform',
+      isAdminPortal: false,
+      isClientPortal: false,
       isRootDomain: true,
       apexDomain: platformDomain,
       tenant: null,

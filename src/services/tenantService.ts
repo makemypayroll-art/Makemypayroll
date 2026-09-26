@@ -217,7 +217,7 @@ export class TenantService {
       subscriptionEndDate: data.subscriptionEndDate || now.split('T')[0],
       trialEndDate: data.trialEndDate,
       paymentStatus: data.paymentStatus || (data.subscriptionPlan === 'Trial' ? 'PENDING' : 'PAID'),
-      enabledModules: data.enabledModules && data.enabledModules.length > 0 ? data.enabledModules : defaultModules,
+      enabledModules: data.enabledModules && data.enabledModules.length > 0 ? data.enabledModules : undefined,
       primaryAdmin: {
         name: data.primaryAdmin.name,
         email: data.primaryAdmin.email,

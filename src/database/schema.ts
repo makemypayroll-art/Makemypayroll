@@ -113,7 +113,7 @@ export interface Tenant {
   subscriptionEndDate: string;
   trialEndDate?: string;
   paymentStatus: PaymentStatus;
-  enabledModules: string[];
+  enabledModules?: string[];
   primaryAdmin: {
     name: string;
     email: string;

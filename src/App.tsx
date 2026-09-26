@@ -1,41 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { OrganizationProvider } from './context/OrganizationContext';
 import { NotificationProvider } from './context/NotificationContext';
-import { AppLayout } from './layouts/AppLayout';
-
-// Super Admin Layout & Modules
-import { SuperAdminLayout } from './admin/layouts/SuperAdminLayout';
-import { SuperAdminDashboard } from './admin/dashboard/SuperAdminDashboard';
-import { ClientManagement } from './admin/clients/ClientManagement';
-import { SubscriptionManagement } from './admin/subscriptions/SubscriptionManagement';
-import { LicenceManagement } from './admin/licences/LicenceManagement';
-import { PaymentManagement } from './admin/payments/PaymentManagement';
-import { AuditLogViewer } from './admin/audit/AuditLogViewer';
-import { AdminUserManagement } from './admin/users/AdminUserManagement';
-import { SaaSSettings } from './admin/settings/SaaSSettings';
-
-// 11 Core Client HRMS Modules
-import { DashboardModule } from './modules/dashboard/DashboardModule';
-import { ShiftModule } from './modules/shift-management/ShiftModule';
-import { AttendanceModule } from './modules/attendance/AttendanceModule';
-import { LeaveModule } from './modules/leave-management/LeaveModule';
-import { EmployeeModule } from './modules/employee-management/EmployeeModule';
-import { TicketModule } from './modules/ticket-management/TicketModule';
-import { OnboardingModule } from './modules/onboarding/OnboardingModule';
-import { InventoryModule } from './modules/inventory-management/InventoryModule';
-import { GeoLocationModule } from './modules/geo-location/GeoLocationModule';
-import { PayrollModule } from './modules/payroll/PayrollModule';
-import { SettingsModule } from './modules/settings/SettingsModule';
-import { SetupWizardModal } from './components/common/SetupWizardModal';
 import { AccessDeniedScreen } from './components/common/AccessDeniedScreen';
 import { TenantNotFoundScreen } from './components/common/TenantNotFoundScreen';
 import { AccountOnHoldScreen } from './components/common/AccountOnHoldScreen';
 import { SecurityGateLoading } from './components/common/SecurityGateLoading';
 import { LoginScreen } from './components/auth/LoginScreen';
-import { TenantService } from './services/tenantService';
-import { TenantResolver } from './services/tenantResolver';
 import { TenantHostService } from './services/tenantHostService';
+import { AdminPortal } from './portals/admin/AdminPortal';
+import { ClientPortal } from './portals/client/ClientPortal';
+import { PublicLandingPortal } from './portals/landing/PublicLandingPortal';
 
 export const AppContent: React.FC = () => {
   const {
@@ -48,14 +23,6 @@ export const AppContent: React.FC = () => {
     isAuthenticated,
     isLoading
   } = useAuth();
-
-  // Super Admin Navigation state
-  const [activeAdminSection, setActiveAdminSection] = useState('dashboard');
-  const [isCreateClientOpen, setIsCreateClientOpen] = useState(false);
-
-  // Client HRMS Navigation state
-  const [activeClientModule, setActiveClientModule] = useState('dashboard');
-  const [isSetupWizardOpen, setIsSetupWizardOpen] = useState(false);
 
   // Centralized Multi-Tenant Hostname & Path Resolution
   const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -77,12 +44,39 @@ export const AppContent: React.FC = () => {
     return <SecurityGateLoading />;
   }
 
-  // 3. Unauthenticated User Gate (Renders context-specific Login)
+  // 3. Admin Portal Mode (admin.makemypayroll.com or admin.localhost)
+  if (resolvedTenantContext.mode === 'admin') {
+    if (!isAuthenticated) {
+      return <LoginScreen tenantContext={resolvedTenantContext} />;
+    }
+    if (!isSuperAdmin) {
+      return (
+        <AccessDeniedScreen
+          attemptedTenantId="MakeMyPayroll Admin Control Panel"
+          userTenantId={currentUser.organizationId || 'Client User'}
+          onGoHome={() => {
+            setAppEnvironment('client');
+          }}
+        />
+      );
+    }
+    return <AdminPortal />;
+  }
+
+  // 4. Platform Root Domain Mode (makemypayroll.com)
+  if (resolvedTenantContext.mode === 'platform') {
+    if (isAuthenticated && isSuperAdmin && appEnvironment === 'super_admin') {
+      return <AdminPortal />;
+    }
+    return <PublicLandingPortal />;
+  }
+
+  // 5. Unauthenticated User Gate for Tenant & Development Modes
   if (!isAuthenticated) {
     return <LoginScreen tenantContext={resolvedTenantContext} />;
   }
 
-  // 4. Tenant Context Resolution & Boundary Enforcement
+  // 6. Tenant Context Resolution & Boundary Enforcement (Portal Y / Legacy Route)
   const targetTenant = resolvedTenantContext.tenant;
 
   if (targetTenant) {
@@ -116,6 +110,7 @@ export const AppContent: React.FC = () => {
     }
   }
 
+  // Sync active tenant in context if needed
   React.useEffect(() => {
     if (targetTenant) {
       const userOrgId = currentUser.organizationId;
@@ -130,103 +125,17 @@ export const AppContent: React.FC = () => {
         setActiveTenantId(targetTenant.tenantId);
         setAppEnvironment('client');
       }
+    } else if (resolvedTenantContext.mode === 'admin' && isSuperAdmin && appEnvironment !== 'super_admin') {
+      setAppEnvironment('super_admin');
     }
-  }, [targetTenant?.tenantId, isSuperAdmin, currentUser.organizationId]);
+  }, [targetTenant?.tenantId, isSuperAdmin, currentUser.organizationId, resolvedTenantContext.mode]);
 
-
-  // -------------------------------------------------------------
-  // 1. SUPER ADMIN CONTROL ROOM ENVIRONMENT (Strict Role Enforcement)
-  // -------------------------------------------------------------
+  // 7. Render appropriate Portal based on appEnvironment & role
   if (appEnvironment === 'super_admin' && isSuperAdmin) {
-    const renderAdminContent = () => {
-      switch (activeAdminSection) {
-        case 'dashboard':
-          return <SuperAdminDashboard onNavigate={setActiveAdminSection} />;
-        case 'clients':
-          return (
-            <ClientManagement
-              isCreateModalOpenExternal={isCreateClientOpen}
-              onCloseCreateModalExternal={() => setIsCreateClientOpen(false)}
-            />
-          );
-        case 'subscriptions':
-          return <SubscriptionManagement />;
-        case 'licences':
-          return <LicenceManagement />;
-        case 'payments':
-          return <PaymentManagement />;
-        case 'support':
-          return <TicketModule />;
-        case 'audit':
-          return <AuditLogViewer />;
-        case 'users':
-          return <AdminUserManagement />;
-        case 'settings':
-          return <SaaSSettings />;
-        default:
-          return <SuperAdminDashboard onNavigate={setActiveAdminSection} />;
-      }
-    };
-
-    return (
-      <SuperAdminLayout
-        activeSection={activeAdminSection}
-        setActiveSection={setActiveAdminSection}
-        onOpenCreateClient={() => {
-          setActiveAdminSection('clients');
-          setIsCreateClientOpen(true);
-        }}
-      >
-        {renderAdminContent()}
-      </SuperAdminLayout>
-    );
+    return <AdminPortal />;
   }
 
-  // -------------------------------------------------------------
-  // 2. CLIENT HRMS ENVIRONMENT
-  // -------------------------------------------------------------
-  const renderClientModule = () => {
-    switch (activeClientModule) {
-      case 'dashboard':
-        return <DashboardModule onNavigate={setActiveClientModule} />;
-      case 'shifts':
-        return <ShiftModule />;
-      case 'attendance':
-        return <AttendanceModule />;
-      case 'leaves':
-        return <LeaveModule />;
-      case 'employees':
-        return <EmployeeModule />;
-      case 'tickets':
-        return <TicketModule />;
-      case 'onboarding':
-        return <OnboardingModule />;
-      case 'inventory':
-        return <InventoryModule />;
-      case 'geolocation':
-        return <GeoLocationModule />;
-      case 'payroll':
-        return <PayrollModule />;
-      case 'settings':
-        return <SettingsModule />;
-      default:
-        return <DashboardModule onNavigate={setActiveClientModule} />;
-    }
-  };
-
-  return (
-    <AppLayout activeModule={activeClientModule} setActiveModule={setActiveClientModule}>
-      {renderClientModule()}
-
-      {/* 10-Step Setup Wizard for New Client Tenants */}
-      {activeTenant && !activeTenant.setupCompleted && isSetupWizardOpen && (
-        <SetupWizardModal
-          isOpen={isSetupWizardOpen}
-          onClose={() => setIsSetupWizardOpen(false)}
-        />
-      )}
-    </AppLayout>
-  );
+  return <ClientPortal />;
 };
 
 export default function App() {

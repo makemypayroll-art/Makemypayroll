@@ -12,7 +12,8 @@ import {
   ChevronRight,
   ExternalLink,
   Sparkles,
-  LogOut
+  LogOut,
+  Layers
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { TenantService } from '../../services/tenantService';
@@ -55,6 +56,13 @@ export const SuperAdminSidebar: React.FC<SuperAdminSidebarProps> = ({
       icon: <CreditCard className="w-5 h-5" />,
       badge: stats.trialClients > 0 ? `${stats.trialClients} Trial` : null,
       badgeColor: 'bg-purple-600 text-white',
+    },
+    {
+      id: 'plans',
+      name: 'Plans & Features',
+      icon: <Layers className="w-5 h-5" />,
+      badge: '4 Tiers',
+      badgeColor: 'bg-purple-900 text-purple-200',
     },
     {
       id: 'licences',
