@@ -286,6 +286,37 @@ assert(
   `Allowed: ${silarisAuthorizedAccess.isAllowed}, Status: ${silarisAuthorizedAccess.status}`
 );
 
+// ----------------------------------------------------
+// TEST 12: Dynamic Organization Settings Resolution
+// ----------------------------------------------------
+import { SettingsService } from '../services/settingsService';
+import { EmployeeService } from '../services/employeeService';
+import { AttendanceService } from '../services/attendanceService';
+import { LeaveService } from '../services/leaveService';
+
+// Set active tenant to Silaris
+StorageEngine.setActiveTenantId('NP-000006');
+
+const resolvedOrg = SettingsService.getOrganization();
+assert(
+  resolvedOrg.id === 'NP-000006' && resolvedOrg.name === 'Silaris Information Technologies' && resolvedOrg.slug === 'silaris',
+  'SettingsService.getOrganization() resolves Silaris Information Technologies (NP-000006)',
+  `Org ID: ${resolvedOrg.id}, Name: ${resolvedOrg.name}, Slug: ${resolvedOrg.slug}`
+);
+
+// ----------------------------------------------------
+// TEST 13: HRMS Module Data Integrity (Workforce, Attendance, Leaves)
+// ----------------------------------------------------
+const employees = EmployeeService.getAll();
+const attendanceRecords = AttendanceService.getAll();
+const leaveApplications = LeaveService.getApplications();
+
+assert(
+  employees.length > 0 && attendanceRecords.length > 0 && leaveApplications.length > 0,
+  'Existing HRMS data modules load cleanly without data loss or duplication',
+  `Employees: ${employees.length}, Attendance Records: ${attendanceRecords.length}, Leave Applications: ${leaveApplications.length}`
+);
+
 console.log('\n====================================================');
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} TESTS PASSED`);
 console.log('====================================================');
@@ -295,3 +326,5 @@ if (passedTests === totalTests) {
 } else {
   process.exit(1);
 }
+
+

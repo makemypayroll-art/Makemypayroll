@@ -12,7 +12,28 @@ import {
 
 export class SettingsService {
   public static getOrganization(): Organization {
-    return StorageEngine.get<Organization>(STORAGE_KEYS.ORGANIZATION, {} as any);
+    const activeTenantId = StorageEngine.getActiveTenantId();
+    const stored = StorageEngine.get<Organization>(STORAGE_KEYS.ORGANIZATION, {} as any);
+    const tenants = StorageEngine.getList<any>(STORAGE_KEYS.TENANTS);
+    const currentTenant = tenants.find(t => t.id === activeTenantId || t.tenantId === activeTenantId);
+
+    if (currentTenant) {
+      return {
+        id: currentTenant.tenantId,
+        name: currentTenant.companyName || stored.name || 'Silaris Information Technologies',
+        slug: currentTenant.slug || 'silaris',
+        logo: currentTenant.logo || stored.logo || '/logo.png',
+        website: stored.website || 'https://www.silaris.in/',
+        email: currentTenant.email || stored.email || 'admin@silaris.in',
+        phone: currentTenant.phone || stored.phone || '+91 98111 55667',
+        address: currentTenant.address || stored.address || 'A-24/5, Mohan Cooperative Industrial Estate, Mathura Road, New Delhi - 110044',
+        gstNumber: currentTenant.gstin || stored.gstNumber || '07AAACS5678Q1Z2',
+        udyamNumber: stored.udyamNumber || 'UDYAM-DL-06-0034821',
+        panNumber: stored.panNumber || 'AAACS5678Q',
+        createdAt: currentTenant.createdAt || stored.createdAt || '2024-01-01T00:00:00Z',
+      };
+    }
+    return stored;
   }
 
   public static updateOrganization(updates: Partial<Organization>): Organization {

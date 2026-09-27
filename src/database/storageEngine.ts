@@ -155,6 +155,19 @@ export class StorageEngine {
           console.error('Failed to sync seed tenants in StorageEngine.init', e);
         }
       }
+
+      // Sync organization record if initialized with legacy id
+      const orgStr = safeStorage.getItem(STORAGE_KEYS.ORGANIZATION);
+      if (orgStr) {
+        try {
+          const org = JSON.parse(orgStr);
+          if (org.id === 'org-novapulse-01' || !org.id) {
+            safeStorage.setItem(STORAGE_KEYS.ORGANIZATION, JSON.stringify(INITIAL_ORGANIZATION));
+          }
+        } catch (e) {
+          console.error('Failed to sync organization in StorageEngine.init', e);
+        }
+      }
     }
     this.initialized = true;
   }

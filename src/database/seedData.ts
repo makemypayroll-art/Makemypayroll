@@ -34,17 +34,17 @@ import {
 } from './schema';
 
 export const INITIAL_ORGANIZATION: Organization = {
-  id: 'org-novapulse-01',
-  name: 'NovaPulse Technologies Pvt. Ltd.',
-  slug: 'novapulse',
+  id: 'NP-000006',
+  name: 'Silaris Information Technologies',
+  slug: 'silaris',
   logo: '/logo.png',
-  website: 'https://www.novapulse.co.in/',
-  email: 'contact@novapulse.co.in',
-  phone: '+91 87966 23604',
-  address: 'Plot 42, Sector 62, Electronic City, Noida, Delhi NCR - 201309, India',
-  gstNumber: '07JTGPK2862G1ZF',
+  website: 'https://www.silaris.in/',
+  email: 'admin@silaris.in',
+  phone: '+91 98111 55667',
+  address: 'A-24/5, Mohan Cooperative Industrial Estate, Mathura Road, New Delhi, Delhi NCR - 110044, India',
+  gstNumber: '07AAACS5678Q1Z2',
   udyamNumber: 'UDYAM-DL-06-0034821',
-  panNumber: 'AAACN9824P',
+  panNumber: 'AAACS5678Q',
   createdAt: '2024-01-01T00:00:00Z',
 };
 
@@ -1800,7 +1800,7 @@ export const INITIAL_TENANTS: Tenant[] = [
   {
     id: 'NP-000006',
     tenantId: 'NP-000006',
-    companyName: 'Silaris Information Technologies Pvt Ltd',
+    companyName: 'Silaris Information Technologies',
     legalName: 'Silaris Information Technologies Private Limited',
     email: 'admin@silaris.in',
     phone: '+91 98111 55667',
@@ -1835,10 +1835,10 @@ export const INITIAL_TENANTS: Tenant[] = [
       'settings'
     ],
     primaryAdmin: {
-      name: 'Silaris Admin',
-      email: 'admin@silaris.in',
-      phone: '+91 98111 55667',
-      userId: 'user-admin-np-000006'
+      name: 'Yatender Sharma',
+      email: 'yatender@novapulse.co.in',
+      phone: '+91 87966 23604',
+      userId: 'user-001'
     },
     setupCompleted: true,
     setupStep: 10,

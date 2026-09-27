@@ -104,9 +104,6 @@ export const PublicLandingPortal: React.FC = () => {
 
             <div>
               <h3 className="text-lg font-extrabold text-white">Admin Control Panel</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Dedicated console for platform administrators to manage tenants, plans, licences, and audit logs.
-              </p>
             </div>
 
             <div className="pt-2 border-t border-slate-800 text-xs font-mono text-purple-300">
@@ -135,9 +132,6 @@ export const PublicLandingPortal: React.FC = () => {
 
             <div>
               <h3 className="text-lg font-extrabold text-white">Client HRMS Portal</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Isolated workforce workspaces for employees, managers, and HR administrators.
-              </p>
             </div>
 
             <div className="pt-2 border-t border-slate-800 text-xs font-mono text-brand-300">
