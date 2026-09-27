@@ -128,6 +128,33 @@ export class StorageEngine {
 
     if (!safeStorage.getItem(STORAGE_KEYS.ORGANIZATION)) {
       this.resetToDefaults();
+    } else {
+      // Ensure seed tenants (including Silaris) are synced into existing storage
+      const existing = safeStorage.getItem(STORAGE_KEYS.TENANTS);
+      if (existing) {
+        try {
+          const tenants: Tenant[] = JSON.parse(existing);
+          let changed = false;
+          for (const initTenant of INITIAL_TENANTS) {
+            const index = tenants.findIndex(
+              t => t.tenantId === initTenant.tenantId || (t.slug && t.slug.toLowerCase() === initTenant.slug.toLowerCase())
+            );
+            if (index === -1) {
+              tenants.push(initTenant);
+              changed = true;
+            } else if (!tenants[index].slug && initTenant.slug) {
+              tenants[index].slug = initTenant.slug;
+              tenants[index].subdomain = initTenant.subdomain || initTenant.slug;
+              changed = true;
+            }
+          }
+          if (changed) {
+            safeStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(tenants));
+          }
+        } catch (e) {
+          console.error('Failed to sync seed tenants in StorageEngine.init', e);
+        }
+      }
     }
     this.initialized = true;
   }

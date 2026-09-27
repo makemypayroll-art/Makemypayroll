@@ -25,8 +25,16 @@ export class TenantService {
   }
 
   public static getById(idOrTenantId: string): Tenant | undefined {
+    if (!idOrTenantId) return undefined;
     const list = this.getAll(true);
-    return list.find(t => t.id === idOrTenantId || t.tenantId === idOrTenantId);
+    const clean = idOrTenantId.toLowerCase().trim();
+    return list.find(
+      t =>
+        (t.id && t.id.toLowerCase() === clean) ||
+        (t.tenantId && t.tenantId.toLowerCase() === clean) ||
+        (t.slug && t.slug.toLowerCase() === clean) ||
+        (t.subdomain && t.subdomain.toLowerCase() === clean)
+    );
   }
 
   public static getBySlug(slug: string): Tenant | undefined {
@@ -34,7 +42,12 @@ export class TenantService {
     const list = this.getAll(true);
     const cleanSlug = slug.toLowerCase().trim();
     return list.find(
-      t => (t.slug && t.slug.toLowerCase() === cleanSlug) || (t.subdomain && t.subdomain.toLowerCase() === cleanSlug) || t.tenantId.toLowerCase() === cleanSlug
+      t =>
+        (t.slug && t.slug.toLowerCase() === cleanSlug) ||
+        (t.subdomain && t.subdomain.toLowerCase() === cleanSlug) ||
+        (t.tenantId && t.tenantId.toLowerCase() === cleanSlug) ||
+        (t.id && t.id.toLowerCase() === cleanSlug) ||
+        (t.clientCode && t.clientCode.toLowerCase() === cleanSlug)
     );
   }
 
@@ -43,8 +56,99 @@ export class TenantService {
   }
 
   public static getByCode(code: string): Tenant | undefined {
+    if (!code) return undefined;
     const list = this.getAll(true);
-    return list.find(t => t.clientCode.toLowerCase() === code.toLowerCase());
+    const cleanCode = code.toLowerCase().trim();
+    return list.find(
+      t =>
+        (t.clientCode && t.clientCode.toLowerCase() === cleanCode) ||
+        (t.tenantId && t.tenantId.toLowerCase() === cleanCode) ||
+        (t.slug && t.slug.toLowerCase() === cleanCode)
+    );
+  }
+
+  /**
+   * Asynchronously fetch tenant from Supabase database by slug, subdomain, or tenant ID
+   * and cache into StorageEngine for fast subsequent synchronous access
+   */
+  public static async fetchTenantBySlugFromSupabase(slugOrSubdomain: string): Promise<Tenant | null> {
+    if (!slugOrSubdomain) return null;
+    const clean = slugOrSubdomain.toLowerCase().trim();
+
+    // First check local cache
+    const cached = this.getBySlug(clean);
+    if (cached) return cached;
+
+    if (!isSupabaseConfigured()) {
+      return null;
+    }
+
+    try {
+      // 1. Query tenants table directly with canonical slug / identifier filter
+      const { data, error } = await supabase
+        .from('tenants')
+        .select('*')
+        .or(`slug.ilike.${clean},login_slug.ilike.%${clean}%,tenant_id.ilike.${clean},client_code.ilike.${clean}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (data && !error) {
+        const mappedTenant: Tenant = {
+          id: data.tenant_id || data.id,
+          tenantId: data.tenant_id,
+          companyName: data.company_name,
+          legalName: data.legal_name || data.company_name,
+          email: data.email,
+          phone: data.phone,
+          address: data.address || '',
+          city: data.city || 'Noida',
+          state: data.state || 'Uttar Pradesh',
+          country: data.country || 'India',
+          gstin: data.gstin,
+          industry: data.industry || 'Information Technology',
+          logo: data.logo_url || '/logo.png',
+          clientCode: data.client_code || data.tenant_id,
+          slug: data.slug || clean,
+          subdomain: data.slug || clean,
+          loginSlug: data.login_slug || getTenantSubdomainUrl(data.slug || clean),
+          status: data.status || 'ACTIVE',
+          licensedEmployees: data.licensed_employees || 20,
+          subscriptionPlan: data.subscription_plan || 'Monthly',
+          subscriptionStartDate: data.subscription_start_date || new Date().toISOString().split('T')[0],
+          subscriptionEndDate: data.subscription_end_date || new Date().toISOString().split('T')[0],
+          paymentStatus: data.payment_status || 'PAID',
+          enabledModules: [
+            'dashboard',
+            'shifts',
+            'attendance',
+            'leaves',
+            'employees',
+            'tickets',
+            'onboarding',
+            'inventory',
+            'geolocation',
+            'payroll',
+            'settings',
+          ],
+          primaryAdmin: {
+            name: 'Administrator',
+            email: data.email,
+            phone: data.phone,
+          },
+          setupCompleted: true,
+          setupStep: 10,
+          createdAt: data.created_at || new Date().toISOString(),
+          updatedAt: data.updated_at || new Date().toISOString(),
+        };
+
+        StorageEngine.upsert<Tenant>(STORAGE_KEYS.TENANTS, mappedTenant);
+        return mappedTenant;
+      }
+    } catch (err) {
+      console.warn('Supabase tenant resolution error:', err);
+    }
+
+    return null;
   }
 
   public static slugExists(slug: string, excludeTenantId?: string): boolean {

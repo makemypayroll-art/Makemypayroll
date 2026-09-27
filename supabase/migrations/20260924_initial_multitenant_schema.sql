@@ -39,5 +39,11 @@ INSERT INTO tenants (
   'accounts@quantumfintech.io', '+91 98555 00005', 'Cyber City, DLF Phase 2', 'Gurugram', 'Haryana', 'India',
   '06EEEEE4444E1Z9', 'Financial Services & FinTech', 35, 'Monthly', '2026-07-15', '2026-08-15', 'OVERDUE', 'ON_HOLD',
   'app.novapulse.co.in/login?tenant=NP-000005', 'QUANTUM'
+),
+(
+  'NP-000006', 'Silaris Information Technologies Pvt Ltd', 'Silaris Information Technologies Private Limited',
+  'admin@silaris.in', '+91 98111 55667', 'A-24/5, Mohan Cooperative Industrial Estate, Mathura Road', 'New Delhi', 'Delhi', 'India',
+  '07AAACS5678Q1Z2', 'Information Technology & BPO', 50, 'Annual', '2026-09-24', '2027-09-23', 'PAID', 'ACTIVE',
+  'https://silaris.makemypayroll.com', 'SILARIS'
 )
 ON CONFLICT (tenant_id) DO NOTHING;

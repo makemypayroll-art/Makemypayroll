@@ -545,6 +545,26 @@ CREATE POLICY p_tenants_client_read ON tenants
   FOR SELECT
   USING (tenant_id = get_current_user_tenant_id());
 
+-- Allow public resolution of active/non-archived tenant workspaces for subdomain routing
+DROP POLICY IF EXISTS p_tenants_public_read ON tenants;
+CREATE POLICY p_tenants_public_read ON tenants
+  FOR SELECT
+  TO anon, authenticated
+  USING (status NOT IN ('ARCHIVED'));
+
+-- Security Definer RPC for Canonical Tenant Resolution
+CREATE OR REPLACE FUNCTION get_tenant_by_subdomain(p_slug TEXT)
+RETURNS SETOF tenants AS $$
+  SELECT * FROM tenants
+  WHERE (
+    LOWER(slug) = LOWER(TRIM(p_slug))
+    OR tenant_id = TRIM(p_slug)
+    OR LOWER(client_code) = LOWER(TRIM(p_slug))
+  )
+  AND status NOT IN ('ARCHIVED')
+  LIMIT 1;
+$$ LANGUAGE sql SECURITY DEFINER;
+
 -- -------------------------------------------------------------
 -- RLS POLICIES FOR USER_PROFILES
 -- -------------------------------------------------------------

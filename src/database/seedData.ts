@@ -1796,6 +1796,54 @@ export const INITIAL_TENANTS: Tenant[] = [
     setupStep: 10,
     createdAt: '2026-05-01T00:00:00Z',
     updatedAt: '2026-08-15T00:00:00Z'
+  },
+  {
+    id: 'NP-000006',
+    tenantId: 'NP-000006',
+    companyName: 'Silaris Information Technologies Pvt Ltd',
+    legalName: 'Silaris Information Technologies Private Limited',
+    email: 'admin@silaris.in',
+    phone: '+91 98111 55667',
+    address: 'A-24/5, Mohan Cooperative Industrial Estate, Mathura Road',
+    city: 'New Delhi',
+    state: 'Delhi',
+    country: 'India',
+    gstin: '07AAACS5678Q1Z2',
+    industry: 'Information Technology & BPO',
+    logo: '/logo.png',
+    clientCode: 'CLI-SIL-06',
+    slug: 'silaris',
+    subdomain: 'silaris',
+    loginSlug: 'https://silaris.makemypayroll.com',
+    status: 'ACTIVE',
+    licensedEmployees: 50,
+    subscriptionPlan: 'Annual',
+    subscriptionStartDate: '2026-09-24',
+    subscriptionEndDate: '2027-09-23',
+    paymentStatus: 'PAID',
+    enabledModules: [
+      'dashboard',
+      'shifts',
+      'attendance',
+      'leaves',
+      'employees',
+      'tickets',
+      'onboarding',
+      'inventory',
+      'geolocation',
+      'payroll',
+      'settings'
+    ],
+    primaryAdmin: {
+      name: 'Silaris Admin',
+      email: 'admin@silaris.in',
+      phone: '+91 98111 55667',
+      userId: 'user-admin-np-000006'
+    },
+    setupCompleted: true,
+    setupStep: 10,
+    createdAt: '2026-09-24T10:00:00Z',
+    updatedAt: '2026-09-24T10:00:00Z'
   }
 ];
 
@@ -1882,6 +1930,23 @@ export const INITIAL_TENANT_SUBSCRIPTIONS: TenantSubscription[] = [
     renewalDate: '2026-08-01',
     notes: 'Quarterly subscription expired without renewal.',
     createdAt: '2026-05-01T00:00:00Z'
+  },
+  {
+    id: 'sub-006',
+    tenantId: 'NP-000006',
+    companyName: 'Silaris Information Technologies Pvt Ltd',
+    planName: 'Annual',
+    billingCycle: 'Annual',
+    startDate: '2026-09-24',
+    endDate: '2027-09-23',
+    licensedEmployees: 50,
+    amount: 72000,
+    currency: 'INR',
+    paymentStatus: 'PAID',
+    renewalDate: '2027-09-23',
+    paymentReference: 'TXN-SILARIS-2026',
+    notes: 'Annual Enterprise Plan for Silaris',
+    createdAt: '2026-09-24T10:00:00Z'
   }
 ];
 

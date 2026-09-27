@@ -27,9 +27,34 @@ export const AppContent: React.FC = () => {
   // Centralized Multi-Tenant Hostname & Path Resolution
   const currentHostname = typeof window !== 'undefined' ? window.location.hostname : '';
   const currentPathname = typeof window !== 'undefined' ? window.location.pathname : '';
-  const resolvedTenantContext = TenantHostService.resolve(currentHostname, currentPathname);
+  
+  const [resolvedTenantContext, setResolvedTenantContext] = React.useState(() =>
+    TenantHostService.resolve(currentHostname, currentPathname)
+  );
+  const [isResolvingAsync, setIsResolvingAsync] = React.useState(false);
 
-  // 1. Unknown Subdomain or Invalid /t/ path
+  React.useEffect(() => {
+    const syncResolution = TenantHostService.resolve(currentHostname, currentPathname);
+    setResolvedTenantContext(syncResolution);
+
+    if (syncResolution.status === 'NOT_FOUND' && (syncResolution.subdomain || syncResolution.pathTenantId)) {
+      setIsResolvingAsync(true);
+      TenantHostService.resolveAsync(currentHostname, currentPathname)
+        .then(asyncRes => {
+          setResolvedTenantContext(asyncRes);
+        })
+        .finally(() => {
+          setIsResolvingAsync(false);
+        });
+    }
+  }, [currentHostname, currentPathname]);
+
+  // 1. Security Gate Loading state (Auth loading or Async Tenant resolution)
+  if (isLoading || isResolvingAsync) {
+    return <SecurityGateLoading />;
+  }
+
+  // 2. Unknown Subdomain or Invalid /t/ path
   if (resolvedTenantContext.error === 'TENANT_NOT_FOUND' || resolvedTenantContext.status === 'NOT_FOUND') {
     return (
       <TenantNotFoundScreen
@@ -37,11 +62,6 @@ export const AppContent: React.FC = () => {
         identifier={resolvedTenantContext.pathTenantId || undefined}
       />
     );
-  }
-
-  // 2. Security Gate Loading state
-  if (isLoading) {
-    return <SecurityGateLoading />;
   }
 
   // 3. Admin Portal Mode (admin.makemypayroll.com or admin.localhost)

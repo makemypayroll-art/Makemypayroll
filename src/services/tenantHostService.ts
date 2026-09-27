@@ -268,6 +268,51 @@ export class TenantHostService {
   }
 
   /**
+   * Asynchronously resolves TenantHostContext, falling back to Supabase database query if not in local memory
+   */
+  public static async resolveAsync(
+    hostname?: string,
+    pathname?: string,
+    platformDomain: string = PLATFORM_DOMAIN
+  ): Promise<TenantHostContext> {
+    const syncRes = this.resolve(hostname, pathname, platformDomain);
+
+    if (syncRes.status === 'NOT_FOUND' && syncRes.subdomain) {
+      const dbTenant = await TenantService.fetchTenantBySlugFromSupabase(syncRes.subdomain);
+      if (dbTenant) {
+        return {
+          mode: 'tenant',
+          isAdminPortal: false,
+          isClientPortal: true,
+          isRootDomain: false,
+          apexDomain: platformDomain,
+          subdomain: syncRes.subdomain,
+          tenantId: dbTenant.tenantId,
+          tenant: dbTenant,
+          status: dbTenant.status,
+        };
+      }
+    } else if (syncRes.status === 'NOT_FOUND' && syncRes.pathTenantId) {
+      const dbTenant = await TenantService.fetchTenantBySlugFromSupabase(syncRes.pathTenantId);
+      if (dbTenant) {
+        return {
+          mode: 'legacy',
+          isAdminPortal: false,
+          isClientPortal: true,
+          isRootDomain: false,
+          apexDomain: platformDomain,
+          pathTenantId: syncRes.pathTenantId,
+          tenantId: dbTenant.tenantId,
+          tenant: dbTenant,
+          status: dbTenant.status,
+        };
+      }
+    }
+
+    return syncRes;
+  }
+
+  /**
    * Resolves access permission based on auth, user profile, and host context
    */
   public static resolveAccess(params: {
