@@ -89,15 +89,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   let currentEmployee = currentUser.employeeId ? EmployeeService.getById(currentUser.employeeId) : undefined;
   if (!currentEmployee && currentUser.email) {
     currentEmployee = EmployeeService.getAll().find(
-      e => e.email?.toLowerCase() === currentUser.email?.toLowerCase() &&
-           (e.organizationId === activeTenantId || (e as any).tenantId === activeTenantId || activeTenantId === 'NP-000001')
+      e => e.email?.toLowerCase() === currentUser.email?.toLowerCase()
     );
   }
-  // When active tenant is a specific client tenant, ensure employee belongs strictly to that tenant
-  if (currentEmployee && activeTenantId && activeTenantId !== 'NP-000001') {
-    if (currentEmployee.organizationId && currentEmployee.organizationId !== activeTenantId && (currentEmployee as any).tenantId !== activeTenantId) {
-      currentEmployee = undefined;
-    }
+
+  // Fallback employee representation so every authenticated profile/designation has Check-In available
+  if (!currentEmployee && currentUser && currentUser.id) {
+    const names = (currentUser.fullName || 'User').split(' ');
+    currentEmployee = {
+      id: currentUser.employeeId || currentUser.id,
+      employeeCode: (currentUser as any).employeeCode || `EMP-${currentUser.id.slice(-4).toUpperCase()}`,
+      organizationId: currentUser.organizationId || activeTenantId || 'NP-000006',
+      branchId: 'branch-delhi-01',
+      departmentId: 'dept-hr-02',
+      designationId: 'desig-01',
+      firstName: names[0] || 'User',
+      lastName: names.slice(1).join(' ') || '',
+      email: currentUser.email || 'user@hrms.local',
+      phone: (currentUser as any).phone || '+91 98000 00000',
+      dob: '1990-01-01',
+      gender: 'Other',
+      joiningDate: '2024-01-01',
+      employmentType: 'Full-time',
+      employmentStatus: 'Active',
+      noticePeriodDays: 30,
+      assignedShiftId: 'shift-gen-01',
+      salaryStructure: {} as any,
+      bankDetails: {} as any,
+      statutoryDetails: {} as any,
+      emergencyContact: {} as any,
+      documents: [],
+      avatarUrl: currentUser.avatar || '/avatar.png',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   const roles = AuthService.getRoles();

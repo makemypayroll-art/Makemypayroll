@@ -68,18 +68,14 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
   const activeEmployees = employees.filter(e => e.employmentStatus === 'Active');
   const inactiveEmployees = employees.filter(e => e.employmentStatus !== 'Active');
 
-  const allAttendance = AttendanceService.getAll();
   const today = new Date().toISOString().split('T')[0];
-  let todayAttendance = allAttendance.filter(a => a.date === today);
-  if (todayAttendance.length === 0) {
-    todayAttendance = allAttendance.filter(a => a.date === '2026-09-21');
-  }
+  const attendanceStats = AttendanceService.getTodayStats(today);
 
-  const presentCount = todayAttendance.filter(a => a.status === 'Present' || a.status === 'Work From Home' || a.status === 'On Duty').length;
-  const lateCount = todayAttendance.filter(a => a.status === 'Late Arrival').length;
-  const leaveCount = todayAttendance.filter(a => a.status === 'Leave').length;
-  const halfDayCount = todayAttendance.filter(a => a.status === 'Half-Day').length;
-  const absentCount = Math.max(0, activeEmployees.length - (presentCount + lateCount + leaveCount + halfDayCount));
+  const presentCount = attendanceStats.presentCount;
+  const lateCount = attendanceStats.lateCount;
+  const leaveCount = attendanceStats.leaveCount;
+  const halfDayCount = attendanceStats.halfDayCount;
+  const absentCount = attendanceStats.absentCount;
 
   const pendingLeaves = LeaveService.getApplications().filter(a => a.status === 'pending');
   const pendingSwaps = ShiftService.getSwapRequests().filter(s => s.status === 'pending_peer' || s.status === 'peer_accepted');
@@ -106,7 +102,7 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
 
   // Check personal attendance for the currently authenticated employee record for today
   const myTodayAttendance = currentEmployee
-    ? allAttendance.find(a => a.employeeId === currentEmployee.id && a.date === today)
+    ? AttendanceService.getTodayAttendanceForEmployee(currentEmployee.id, today)
     : undefined;
 
   const hasClockedIn = !!myTodayAttendance?.checkIn;
@@ -122,12 +118,12 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
       AttendanceService.recordPunch({
         employeeId: currentEmployee.id,
         type,
-        source: 'Web Portal',
+        source: 'WEB',
         location: { lat: 28.6280, lng: 77.3649, inGeofence: true, address: 'NovaPulse HQ' },
       });
-      alert(`Successfully clocked ${type.toLowerCase()} for today!`);
+      alert(type === 'IN' ? 'Check-In recorded successfully! Active session started.' : 'Check-Out recorded successfully! Shift completed.');
     } catch (err: any) {
-      alert(err.message || `Failed to clock ${type.toLowerCase()}`);
+      alert(err.message || `Failed to record check-${type.toLowerCase()}`);
     }
   };
 
@@ -170,24 +166,27 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
                     variant="success"
                     onClick={() => handleQuickPunch('IN')}
                     leftIcon={<Fingerprint className="w-4 h-4" />}
+                    className="font-extrabold shadow-md bg-emerald-600 hover:bg-emerald-700 border-0"
                   >
-                    Clock In
+                    CHECK IN
                   </Button>
                 )}
 
                 {hasClockedIn && !hasClockedOut && (
                   <>
-                    <div className="text-xs text-emerald-200 font-semibold px-2">
-                      <span className="text-white/60">In:</span> {myTodayAttendance.checkIn}
+                    <div className="flex items-center gap-2 text-xs font-semibold px-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      <span className="text-emerald-200">Session Active</span>
+                      <span className="text-white/60">({myTodayAttendance?.checkIn})</span>
                     </div>
                     <Button
                       size="sm"
                       variant="secondary"
                       onClick={() => handleQuickPunch('OUT')}
-                      className="bg-rose-600/90 hover:bg-rose-700 text-white border-0"
+                      className="bg-rose-600 hover:bg-rose-700 text-white border-0 font-extrabold shadow-md"
                       leftIcon={<Clock className="w-4 h-4" />}
                     >
-                      Clock Out
+                      CHECK OUT
                     </Button>
                   </>
                 )}
@@ -199,7 +198,7 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
                       In: {myTodayAttendance.checkIn} • Out: {myTodayAttendance.checkOut}
                     </span>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-bold border border-emerald-400/30">
-                      ✓ {myTodayAttendance.status}
+                      ✓ Completed ({myTodayAttendance.workHours || 8}h)
                     </span>
                   </div>
                 )}

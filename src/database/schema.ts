@@ -417,9 +417,17 @@ export interface ShiftSwapRequest {
   createdAt: string;
 }
 
-// -------------------------------------------------------------
-// ATTENDANCE MANAGEMENT
-// -------------------------------------------------------------
+export type AttendancePunchSource =
+  | 'WEB'
+  | 'MOBILE'
+  | 'BIOMETRIC'
+  | 'MANAGER_MANUAL'
+  | 'HR_MANUAL'
+  | 'ADMIN_MANUAL'
+  | 'Web Portal'
+  | 'Mobile GPS'
+  | 'Biometric Machine'
+  | 'Manual HR';
 
 export interface GeoPoint {
   lat: number;
@@ -439,14 +447,60 @@ export interface Attendance {
   checkOut?: string; // ISO timestamp or "18:15:00"
   status: AttendanceStatus;
   workDurationMinutes: number;
+  workHours?: number;
   lateMinutes: number;
   earlyDepartureMinutes: number;
   overtimeMinutes: number;
   isRegularized: boolean;
-  punchSource: 'Biometric Machine' | 'Web Portal' | 'Mobile GPS' | 'Manual HR';
+  punchSource: AttendancePunchSource;
   checkInLocation?: GeoPoint;
   checkOutLocation?: GeoPoint;
   notes?: string;
+  markedBy?: string;
+  markedAt?: string;
+  lastEditedBy?: string;
+  lastEditedAt?: string;
+}
+
+export interface EmployeeGeoTrackingConfig {
+  id: string;
+  organizationId: string;
+  employeeId: string;
+  isTrackingEnabled: boolean;
+  isGeofencingEnabled: boolean;
+  allowedRadiusMeters?: number;
+  workingHoursStart?: string;
+  workingHoursEnd?: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
+export interface GeoLocationPoint {
+  id: string;
+  organizationId: string;
+  employeeId: string;
+  date: string; // YYYY-MM-DD
+  timestamp: string; // ISO string or HH:MM:SS
+  latitude: number;
+  longitude: number;
+  accuracyMeters?: number;
+  address?: string;
+  inGeofence: boolean;
+  distanceFromOfficeMeters?: number;
+  speedKmh?: number;
+}
+
+export interface GeoFenceEvent {
+  id: string;
+  organizationId: string;
+  employeeId: string;
+  date: string; // YYYY-MM-DD
+  timestamp: string;
+  eventType: 'ENTERED' | 'EXITED' | 'OUTSIDE' | 'RETURNED';
+  locationName: string;
+  latitude: number;
+  longitude: number;
+  details?: string;
 }
 
 export interface AttendanceRegularization {

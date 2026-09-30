@@ -109,7 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'geolocation',
-      name: 'Geo-Location & Maps',
+      name: 'Geo Location',
       icon: <MapPin className="w-5 h-5" />,
       moduleKey: 'geolocation',
       badge: null,

@@ -1,8 +1,9 @@
 // Attendance Management & Real-time Calculation Service
 import { StorageEngine, STORAGE_KEYS } from '../database/storageEngine';
-import { Attendance, AttendanceRegularization, AttendanceStatus, Shift } from '../database/schema';
+import { Attendance, AttendanceRegularization, AttendanceStatus, AttendancePunchSource, Shift } from '../database/schema';
 import { ShiftService } from './shiftService';
 import { EmployeeService } from './employeeService';
+import { AuditService } from './auditService';
 
 export class AttendanceService {
   public static getAll(): Attendance[] {
@@ -26,25 +27,57 @@ export class AttendanceService {
     return this.getByDate(today);
   }
 
+  public static getTodayAttendanceForEmployee(employeeId: string, date?: string): Attendance | undefined {
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    return this.getAll().find(a => a.employeeId === employeeId && a.date === targetDate);
+  }
+
+  public static getTodayStats(date?: string) {
+    const targetDate = date || new Date().toISOString().split('T')[0];
+    const records = this.getByDate(targetDate);
+    const activeEmployees = EmployeeService.getAll().filter(e => e.employmentStatus === 'Active');
+
+    const presentCount = records.filter(a => a.status === 'Present' || a.status === 'Work From Home' || a.status === 'On Duty').length;
+    const lateCount = records.filter(a => a.status === 'Late Arrival').length;
+    const leaveCount = records.filter(a => a.status === 'Leave').length;
+    const halfDayCount = records.filter(a => a.status === 'Half-Day').length;
+    const weeklyOffCount = records.filter(a => a.status === 'Weekly Off').length;
+    const absentCount = Math.max(0, activeEmployees.length - (presentCount + lateCount + leaveCount + halfDayCount + weeklyOffCount));
+
+    return {
+      date: targetDate,
+      totalEmployees: activeEmployees.length,
+      presentCount,
+      lateCount,
+      leaveCount,
+      halfDayCount,
+      weeklyOffCount,
+      absentCount,
+      presentPercentage: activeEmployees.length > 0 ? Math.round(((presentCount + lateCount) / activeEmployees.length) * 100) : 0,
+    };
+  }
+
   public static recordPunch(params: {
     employeeId: string;
     type: 'IN' | 'OUT';
     time?: string; // "09:05:00"
-    source?: Attendance['punchSource'];
+    source?: AttendancePunchSource;
     location?: Attendance['checkInLocation'];
     notes?: string;
+    markedBy?: string;
   }): Attendance {
     const today = new Date().toISOString().split('T')[0];
     const currentTime = params.time || new Date().toTimeString().split(' ')[0];
     const emp = EmployeeService.getById(params.employeeId);
     const shift = emp ? ShiftService.getShiftById(emp.assignedShiftId) : undefined;
+    const punchSource = params.source || 'WEB';
 
     const existingRecords = this.getAll();
     const index = existingRecords.findIndex(a => a.employeeId === params.employeeId && a.date === today);
 
     if (params.type === 'IN') {
       if (index >= 0 && existingRecords[index]?.checkIn) {
-        throw new Error(`Already clocked in today at ${existingRecords[index].checkIn}. Duplicate Clock In is not allowed.`);
+        throw new Error(`Already checked in today at ${existingRecords[index].checkIn}. Duplicate Check In is not allowed.`);
       }
 
       let lateMinutes = 0;
@@ -76,13 +109,24 @@ export class AttendanceService {
         earlyDepartureMinutes: 0,
         overtimeMinutes: 0,
         isRegularized: false,
-        punchSource: params.source || 'Web Portal',
+        punchSource: punchSource,
         checkInLocation: params.location,
         notes: params.notes,
+        markedBy: params.markedBy || 'Self',
+        markedAt: new Date().toISOString(),
       };
 
       if (index >= 0) {
-        existingRecords[index] = { ...existingRecords[index], checkIn: currentTime, status: calculatedStatus, lateMinutes };
+        existingRecords[index] = {
+          ...existingRecords[index],
+          checkIn: currentTime,
+          status: calculatedStatus,
+          lateMinutes,
+          punchSource,
+          checkInLocation: params.location || existingRecords[index].checkInLocation,
+          markedBy: params.markedBy || existingRecords[index].markedBy || 'Self',
+          markedAt: new Date().toISOString(),
+        };
         StorageEngine.setList(STORAGE_KEYS.ATTENDANCE, existingRecords);
         return existingRecords[index];
       } else {
@@ -90,12 +134,12 @@ export class AttendanceService {
       }
     } else {
       // Punch OUT
-      let record = index >= 0 ? existingRecords[index] : null;
+      const record = index >= 0 ? existingRecords[index] : null;
       if (!record || !record.checkIn) {
-        throw new Error('Cannot Clock Out before Clocking In for today.');
+        throw new Error('Cannot Check Out before Checking In for today.');
       }
       if (record.checkOut) {
-        throw new Error(`Already clocked out today at ${record.checkOut}. Duplicate Clock Out is not allowed.`);
+        throw new Error(`Already checked out today at ${record.checkOut}. Duplicate Check Out is not allowed.`);
       }
 
       // Calculate work duration
@@ -115,8 +159,11 @@ export class AttendanceService {
         ...record,
         checkOut: currentTime,
         workDurationMinutes: durationMinutes,
+        workHours: Number((durationMinutes / 60).toFixed(1)),
         status,
-        checkOutLocation: params.location,
+        checkOutLocation: params.location || record.checkOutLocation,
+        lastEditedBy: params.markedBy || 'Self',
+        lastEditedAt: new Date().toISOString(),
       };
 
       if (index >= 0) {
@@ -127,6 +174,139 @@ export class AttendanceService {
         return StorageEngine.insert<Attendance>(STORAGE_KEYS.ATTENDANCE, updatedRecord);
       }
     }
+  }
+
+  // -------------------------------------------------------------
+  // BATCH MANUAL ATTENDANCE (MANAGER / HR / ADMIN)
+  // -------------------------------------------------------------
+
+  public static saveManualAttendanceBatch(params: {
+    date: string;
+    entries: Array<{
+      employeeId: string;
+      status: AttendanceStatus;
+      notes?: string;
+    }>;
+    user: {
+      id: string;
+      name: string;
+      role: string;
+    };
+  }): { count: number; updated: Attendance[] } {
+    const { date, entries, user } = params;
+    const tenantId = StorageEngine.getActiveTenantId();
+    const now = new Date().toISOString();
+
+    // Determine canonical punch source based on role
+    let punchSource: AttendancePunchSource = 'MANAGER_MANUAL';
+    const roleLower = user.role.toLowerCase();
+    if (roleLower.includes('super admin') || roleLower.includes('platform')) {
+      punchSource = 'ADMIN_MANUAL';
+    } else if (roleLower.includes('hr') || roleLower.includes('admin')) {
+      punchSource = 'HR_MANUAL';
+    }
+
+    const allAtt = this.getAll();
+    const updatedRecords: Attendance[] = [];
+
+    entries.forEach(entry => {
+      const emp = EmployeeService.getById(entry.employeeId);
+      const shift = emp ? ShiftService.getShiftById(emp.assignedShiftId) : undefined;
+      const index = allAtt.findIndex(a => a.employeeId === entry.employeeId && a.date === date);
+
+      // Map status times & durations
+      let checkIn: string | undefined = undefined;
+      let checkOut: string | undefined = undefined;
+      let workDurationMinutes = 0;
+      let lateMinutes = 0;
+
+      if (entry.status === 'Present' || entry.status === 'Work From Home' || entry.status === 'On Duty') {
+        checkIn = shift ? shift.startTime + ':00' : '09:00:00';
+        checkOut = shift ? shift.endTime + ':00' : '18:00:00';
+        workDurationMinutes = 540; // 9 hours
+      } else if (entry.status === 'Late Arrival') {
+        checkIn = '09:30:00';
+        checkOut = '18:30:00';
+        workDurationMinutes = 540;
+        lateMinutes = 30;
+      } else if (entry.status === 'Half-Day') {
+        checkIn = '09:00:00';
+        checkOut = '13:30:00';
+        workDurationMinutes = 270; // 4.5 hours
+      } else {
+        // Absent, Leave, Weekly Off
+        checkIn = undefined;
+        checkOut = undefined;
+        workDurationMinutes = 0;
+      }
+
+      if (index >= 0) {
+        // Edit existing record
+        const prev = allAtt[index];
+        const isChanged = prev.status !== entry.status;
+        allAtt[index] = {
+          ...prev,
+          status: entry.status,
+          checkIn: checkIn || prev.checkIn,
+          checkOut: checkOut || prev.checkOut,
+          workDurationMinutes: workDurationMinutes || prev.workDurationMinutes,
+          lateMinutes,
+          punchSource,
+          notes: entry.notes || prev.notes,
+          lastEditedBy: user.name,
+          lastEditedAt: now,
+        };
+        updatedRecords.push(allAtt[index]);
+
+        if (isChanged) {
+          AuditService.log({
+            userId: user.id,
+            userName: user.name,
+            userRole: user.role,
+            module: 'Manual Attendance',
+            action: 'UPDATE',
+            description: `Updated attendance for ${emp?.firstName || entry.employeeId} on ${date} from ${prev.status} to ${entry.status}`,
+            recordId: prev.id,
+          });
+        }
+      } else {
+        // Create new manual attendance record
+        const newAtt: Attendance = {
+          id: `att-man-${Date.now()}-${entry.employeeId}`,
+          organizationId: tenantId,
+          employeeId: entry.employeeId,
+          date,
+          shiftId: shift ? shift.id : 'shift-gen-01',
+          checkIn,
+          checkOut,
+          status: entry.status,
+          workDurationMinutes,
+          lateMinutes,
+          earlyDepartureMinutes: 0,
+          overtimeMinutes: 0,
+          isRegularized: false,
+          punchSource,
+          notes: entry.notes,
+          markedBy: user.name,
+          markedAt: now,
+        };
+        allAtt.push(newAtt);
+        updatedRecords.push(newAtt);
+
+        AuditService.log({
+          userId: user.id,
+          userName: user.name,
+          userRole: user.role,
+          module: 'Manual Attendance',
+          action: 'CREATE',
+          description: `Marked manual attendance (${entry.status}) for ${emp?.firstName || entry.employeeId} on ${date} [Source: ${punchSource}]`,
+          recordId: newAtt.id,
+        });
+      }
+    });
+
+    StorageEngine.setList(STORAGE_KEYS.ATTENDANCE, allAtt);
+    return { count: updatedRecords.length, updated: updatedRecords };
   }
 
   // --- Regularization Requests ---
@@ -212,7 +392,7 @@ export class AttendanceService {
           earlyDepartureMinutes: 0,
           overtimeMinutes: 0,
           isRegularized: true,
-          punchSource: 'Manual HR',
+          punchSource: 'HR_MANUAL',
         });
       }
     }
@@ -220,3 +400,4 @@ export class AttendanceService {
     return updated;
   }
 }
+

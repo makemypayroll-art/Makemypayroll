@@ -1,4 +1,4 @@
-// MODULE 3: Attendance Management & Regularization Workflow
+// MODULE 3: Attendance Management & Manual Attendance Redesign
 import React, { useState, useEffect } from 'react';
 import {
   CalendarCheck,
@@ -11,9 +11,14 @@ import {
   XCircle,
   AlertCircle,
   Search,
-  UploadCloud,
   MapPin,
-  Navigation,
+  Users,
+  Save,
+  Check,
+  RotateCcw,
+  Sparkles,
+  ChevronRight,
+  ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useOrganization } from '../../context/OrganizationContext';
@@ -21,7 +26,7 @@ import { AttendanceService } from '../../services/attendanceService';
 import { EmployeeService } from '../../services/employeeService';
 import { ShiftService } from '../../services/shiftService';
 import { GeoLocationService } from '../../services/geoLocationService';
-import { Attendance, AttendanceStatus, AttendanceRegularization } from '../../database/schema';
+import { Attendance, AttendanceStatus, AttendanceRegularization, Employee } from '../../database/schema';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -38,20 +43,29 @@ export const AttendanceModule: React.FC = () => {
   const { departments, branches } = useOrganization();
   const [dataVersion, setDataVersion] = useState(0);
 
-  const [activeTab, setActiveTab] = useState<'daily' | 'regularizations' | 'biometric'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'manual' | 'regularizations' | 'biometric'>('daily');
   const [selectedDate, setSelectedDate] = useState('2026-09-21');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Modals
+  // Manual Attendance Grid State
+  const [manualDate, setManualDate] = useState(selectedDate);
+  const [manualDeptFilter, setManualDeptFilter] = useState('all');
+  const [manualSearch, setManualSearch] = useState('');
+  const [manualStatusMap, setManualStatusMap] = useState<Record<string, AttendanceStatus>>({});
+  const [manualNotesMap, setManualNotesMap] = useState<Record<string, string>>({});
+  const [manualSuccessMsg, setManualSuccessMsg] = useState<string | null>(null);
+
+  // Modals & GPS
   const [isPunchModalOpen, setIsPunchModalOpen] = useState(false);
   const [isRegModalOpen, setIsRegModalOpen] = useState(false);
+  const [isGpsLocating, setIsGpsLocating] = useState(false);
 
   const [punchForm, setPunchForm] = useState({
     employeeId: currentEmployee?.id || 'emp-001',
     type: 'IN' as 'IN' | 'OUT',
     time: '09:00:00',
-    source: 'Biometric Machine' as any,
+    source: 'ADMIN_MANUAL' as any,
   });
 
   const [regForm, setRegForm] = useState({
@@ -70,24 +84,55 @@ export const AttendanceModule: React.FC = () => {
   }, []);
 
   const allAttendance = AttendanceService.getAll();
-  const employees = EmployeeService.getAll();
+  const allEmployees = EmployeeService.getAll();
   const shifts = ShiftService.getShifts();
   const regularizations = AttendanceService.getRegularizations();
 
+  // Scope employees for manual attendance:
+  // Managers see only direct reports; HR/Admin/SuperAdmin see full organization workforce
+  let eligibleEmployees = allEmployees.filter(e => e.employmentStatus === 'Active');
+  if (isManager && !isHR && !isSuperAdmin && currentEmployee) {
+    eligibleEmployees = eligibleEmployees.filter(e => e.reportingManagerId === currentEmployee.id || e.id === currentEmployee.id);
+  }
+
+  // Populate manual status map when manual date changes or attendance updates
+  useEffect(() => {
+    const recordsForDate = AttendanceService.getByDate(manualDate);
+    const initialMap: Record<string, AttendanceStatus> = {};
+    const initialNotes: Record<string, string> = {};
+
+    eligibleEmployees.forEach(emp => {
+      const rec = recordsForDate.find(r => r.employeeId === emp.id);
+      if (rec) {
+        initialMap[emp.id] = rec.status;
+        if (rec.notes) initialNotes[emp.id] = rec.notes;
+      }
+    });
+
+    setManualStatusMap(initialMap);
+    setManualNotesMap(initialNotes);
+  }, [manualDate, dataVersion]);
+
   const todayStr = new Date().toISOString().split('T')[0];
   const myTodayAttendance = currentEmployee
-    ? allAttendance.find(a => a.employeeId === currentEmployee.id && a.date === todayStr)
+    ? allAttendance.find(a => a.employeeId === currentEmployee.id && (a.date === todayStr || a.date === selectedDate))
     : undefined;
+
   const hasClockedIn = !!myTodayAttendance?.checkIn;
   const hasClockedOut = !!myTodayAttendance?.checkOut;
 
-  // Filter attendance
+  // Filter daily attendance records
   let filteredRecords = allAttendance.filter(a => a.date === selectedDate);
   if (statusFilter !== 'all') {
     filteredRecords = filteredRecords.filter(a => a.status === statusFilter);
   }
-  if (isEmployee && currentEmployee) {
+  if (isEmployee && !isHR && !isSuperAdmin && !isManager && currentEmployee) {
     filteredRecords = filteredRecords.filter(a => a.employeeId === currentEmployee.id);
+  } else if (isManager && !isHR && !isSuperAdmin && currentEmployee) {
+    filteredRecords = filteredRecords.filter(a => {
+      const emp = EmployeeService.getById(a.employeeId);
+      return emp?.reportingManagerId === currentEmployee.id || emp?.id === currentEmployee.id;
+    });
   }
   if (searchQuery) {
     filteredRecords = filteredRecords.filter(a => {
@@ -97,28 +142,31 @@ export const AttendanceModule: React.FC = () => {
     });
   }
 
-  const handleManualPunch = (e: React.FormEvent) => {
-    e.preventDefault();
+  // --- Handlers ---
+
+  const handleStandardPunch = (type: 'IN' | 'OUT') => {
+    if (!currentEmployee) {
+      alert('No employee profile available.');
+      return;
+    }
     try {
       AttendanceService.recordPunch({
-        employeeId: punchForm.employeeId,
-        type: punchForm.type,
-        time: punchForm.time,
-        source: punchForm.source,
-        location: { lat: 28.6280, lng: 77.3649, inGeofence: true, address: 'Office Gate Terminal' },
+        employeeId: currentEmployee.id,
+        type,
+        source: 'WEB',
+        location: { lat: 28.6280, lng: 77.3649, inGeofence: true, address: 'Web Workspace Check-In' },
+        markedBy: currentUser.fullName,
       });
-      setIsPunchModalOpen(false);
+      alert(`Successfully recorded Check-${type} for today!`);
     } catch (err: any) {
-      alert(err.message || 'Failed to record manual punch');
+      alert(err.message || `Failed to record Check-${type}`);
     }
   };
-
-  const [isGpsLocating, setIsGpsLocating] = useState(false);
 
   const handleGpsPunch = (type: 'IN' | 'OUT') => {
     if (!currentEmployee) return;
     if (!navigator.geolocation) {
-      alert('Geolocation is not supported on this device.');
+      handleStandardPunch(type);
       return;
     }
     setIsGpsLocating(true);
@@ -133,7 +181,7 @@ export const AttendanceModule: React.FC = () => {
           AttendanceService.recordPunch({
             employeeId: currentEmployee.id,
             type,
-            source: 'Mobile GPS',
+            source: 'MOBILE',
             location: {
               lat,
               lng,
@@ -141,77 +189,69 @@ export const AttendanceModule: React.FC = () => {
               address: verification.nearestBranch?.name || 'Mobile GPS Clock-In',
               distanceFromOfficeMeters: verification.distanceMeters,
             },
+            markedBy: currentUser.fullName,
           });
 
           alert(
-            `Clock-${type} successfully recorded via GPS!\n\n` +
+            `Check-${type} recorded successfully via GPS!\n\n` +
             `Location: ${lat.toFixed(4)}, ${lng.toFixed(4)}\n` +
-            `Status: ${verification.isAuthorized ? '✓ Within Office Geofence perimeter' : '⚠ Remote / Outside Geofence'}`
+            `Geofence: ${verification.isAuthorized ? '✓ Inside Office Perimeter' : '⚠ Remote / Outside Geofence'}`
           );
         } catch (err: any) {
-          alert(err.message || `Failed to record Clock-${type}`);
+          alert(err.message || `Failed to record Check-${type}`);
         }
       },
       (err) => {
         setIsGpsLocating(false);
-        alert(`Could not fetch high-accuracy GPS coordinates (${err.message}). Recording standard mobile check-${type.toLowerCase()}.`);
-        try {
-          AttendanceService.recordPunch({
-            employeeId: currentEmployee.id,
-            type,
-            source: 'Mobile GPS',
-            location: { lat: 28.6280, lng: 77.3649, inGeofence: true, address: 'Office Location (Default GPS)' },
-          });
-        } catch (e: any) {
-          alert(e.message || `Failed to record Clock-${type}`);
-        }
+        alert(`Location permission required for location-based attendance/tracking (${err.message}). Recording standard web check-${type.toLowerCase()}.`);
+        handleStandardPunch(type);
       },
-      { enableHighAccuracy: true, timeout: 8000 }
+      { enableHighAccuracy: true, timeout: 6000 }
     );
   };
 
-  const handleApplyRegularization = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentEmployee) return;
+  const handleSaveManualAttendance = () => {
+    const entriesToSave = Object.entries(manualStatusMap).map(([empId, status]) => ({
+      employeeId: empId,
+      status,
+      notes: manualNotesMap[empId] || undefined,
+    }));
 
-    AttendanceService.submitRegularization({
-      employeeId: currentEmployee.id,
-      date: regForm.date,
-      requestedCheckIn: regForm.requestedCheckIn,
-      requestedCheckOut: regForm.requestedCheckOut,
-      requestedStatus: regForm.requestedStatus,
-      reason: regForm.reason,
+    if (entriesToSave.length === 0) {
+      alert('Please select attendance status for at least one employee.');
+      return;
+    }
+
+    const res = AttendanceService.saveManualAttendanceBatch({
+      date: manualDate,
+      entries: entriesToSave,
+      user: {
+        id: currentUser.id,
+        name: currentUser.fullName,
+        role: currentUser.roleName,
+      },
     });
-    setIsRegModalOpen(false);
-    setRegForm({
-      date: selectedDate,
-      requestedCheckIn: '09:00:00',
-      requestedCheckOut: '18:00:00',
-      requestedStatus: 'Present',
-      reason: '',
-    });
+
+    setManualSuccessMsg(`Successfully saved attendance for ${res.count} employee(s) on ${formatDate(manualDate)}!`);
+    setTimeout(() => setManualSuccessMsg(null), 4000);
   };
 
-  const handleExportAttendance = () => {
-    const rows = filteredRecords.map(a => {
-      const emp = EmployeeService.getById(a.employeeId);
-      const shift = shifts.find(s => s.id === a.shiftId);
-      return {
-        'Date': a.date,
-        'Employee Code': emp?.employeeCode || 'N/A',
-        'Employee Name': `${emp?.firstName} ${emp?.lastName}`,
-        'Assigned Shift': shift?.name || 'General',
-        'Check In': a.checkIn || '—',
-        'Check Out': a.checkOut || '—',
-        'Status': a.status,
-        'Late (Mins)': a.lateMinutes,
-        'Work Duration': formatDurationMinutes(a.workDurationMinutes),
-        'Source': a.punchSource,
-        'Regularized': a.isRegularized ? 'Yes' : 'No',
-      };
+  const handleMarkAllPresent = () => {
+    const newMap = { ...manualStatusMap };
+    filteredManualEmployees.forEach(emp => {
+      newMap[emp.id] = 'Present';
     });
-    exportToExcel(`NovaPulse_Attendance_${selectedDate}.xlsx`, 'Daily Attendance', rows);
+    setManualStatusMap(newMap);
   };
+
+  // Filtered employees for manual attendance table
+  const filteredManualEmployees = eligibleEmployees.filter(e => {
+    const matchesDept = manualDeptFilter === 'all' || e.departmentId === manualDeptFilter;
+    const name = `${e.firstName} ${e.lastName}`.toLowerCase();
+    const code = e.employeeCode.toLowerCase();
+    const matchesSearch = !manualSearch || name.includes(manualSearch.toLowerCase()) || code.includes(manualSearch.toLowerCase());
+    return matchesDept && matchesSearch;
+  });
 
   const attendanceColumns: Column<Attendance>[] = [
     {
@@ -221,7 +261,7 @@ export const AttendanceModule: React.FC = () => {
         const emp = EmployeeService.getById(att.employeeId);
         return (
           <div className="flex items-center gap-3">
-            <img src={emp?.avatarUrl} alt="" className="w-8 h-8 rounded-lg object-cover" />
+            <img src={emp?.avatarUrl || '/avatar.png'} alt="" className="w-8 h-8 rounded-lg object-cover border border-slate-200" />
             <div>
               <div className="font-bold text-slate-900">{emp?.firstName} {emp?.lastName}</div>
               <div className="text-xs text-slate-400 font-mono">{emp?.employeeCode}</div>
@@ -238,7 +278,9 @@ export const AttendanceModule: React.FC = () => {
           <div className="font-mono text-xs font-bold text-slate-900">
             {att.checkIn ? att.checkIn : '—'} ➔ {att.checkOut ? att.checkOut : '—'}
           </div>
-          <div className="text-[11px] text-slate-400">{att.punchSource}</div>
+          <div className="text-[11px] text-slate-500 font-medium">
+            Source: <span className="font-mono font-bold text-brand-700">{att.punchSource || 'WEB'}</span>
+          </div>
         </div>
       ),
     },
@@ -269,6 +311,7 @@ export const AttendanceModule: React.FC = () => {
           'Late Arrival': 'late',
           'Leave': 'leave',
           'Work From Home': 'wfh',
+          'Weekly Off': 'default',
         };
         return (
           <div className="flex items-center gap-1.5">
@@ -282,34 +325,60 @@ export const AttendanceModule: React.FC = () => {
         );
       },
     },
+    {
+      key: 'markedBy',
+      header: 'Recorded By',
+      render: (att) => (
+        <div className="text-xs text-slate-600">
+          <div className="font-semibold">{att.markedBy || 'System / Biometric'}</div>
+          {att.lastEditedBy && (
+            <div className="text-[10px] text-amber-700 font-medium">Edited by {att.lastEditedBy}</div>
+          )}
+        </div>
+      ),
+    },
   ];
 
   return (
     <div className="space-y-6">
-      {/* Top Header & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-2 bg-slate-200/80 p-1 rounded-2xl w-fit">
+      {/* Top Header & Navigation Tabs */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex items-center gap-2 bg-slate-200/80 p-1 rounded-2xl w-fit overflow-x-auto max-w-full">
           <button
             onClick={() => setActiveTab('daily')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'daily' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <CalendarCheck className="w-3.5 h-3.5 inline mr-1.5" />
             Daily Attendance Log
           </button>
+          
+          {(isSuperAdmin || isHR || isManager) && (
+            <button
+              onClick={() => setActiveTab('manual')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                activeTab === 'manual' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 inline mr-1.5 text-brand-600" />
+              Manual Attendance Grid
+            </button>
+          )}
+
           <button
             onClick={() => setActiveTab('regularizations')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'regularizations' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Clock className="w-3.5 h-3.5 inline mr-1.5" />
             Regularization Requests ({regularizations.filter(r => r.status === 'pending').length})
           </button>
+          
           <button
             onClick={() => setActiveTab('biometric')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               activeTab === 'biometric' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -318,135 +387,134 @@ export const AttendanceModule: React.FC = () => {
           </button>
         </div>
 
+        {/* Global Check-In / Check-Out Lifecycle Action Bar */}
         <div className="flex flex-wrap items-center gap-2">
-          {currentEmployee ? (
+          {!hasClockedIn ? (
             <div className="flex items-center gap-2">
-              {!hasClockedIn && (
-                <Button
-                  size="sm"
-                  variant="success"
-                  isLoading={isGpsLocating}
-                  onClick={() => handleGpsPunch('IN')}
-                  leftIcon={<MapPin className="w-4 h-4" />}
-                >
-                  GPS Clock In
-                </Button>
-              )}
-
-              {hasClockedIn && !hasClockedOut && (
-                <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
-                  <span className="text-xs font-bold text-slate-700 px-2">In: {myTodayAttendance.checkIn}</span>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    isLoading={isGpsLocating}
-                    onClick={() => handleGpsPunch('OUT')}
-                    leftIcon={<Clock className="w-4 h-4" />}
-                  >
-                    GPS Clock Out
-                  </Button>
-                </div>
-              )}
-
-              {hasClockedIn && hasClockedOut && (
-                <div className="flex items-center gap-2 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200 text-xs font-bold text-emerald-800">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>In: {myTodayAttendance.checkIn} • Out: {myTodayAttendance.checkOut}</span>
-                  <Badge variant="success">{myTodayAttendance.status}</Badge>
-                </div>
-              )}
-
+              <Button
+                size="sm"
+                variant="success"
+                onClick={() => handleStandardPunch('IN')}
+                leftIcon={<CalendarCheck className="w-4 h-4" />}
+                className="font-extrabold shadow-md"
+              >
+                CHECK IN
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setIsRegModalOpen(true)}
-                leftIcon={<Clock className="w-4 h-4" />}
+                isLoading={isGpsLocating}
+                onClick={() => handleGpsPunch('IN')}
+                leftIcon={<MapPin className="w-3.5 h-3.5" />}
+                className="text-xs"
               >
-                Regularize
+                GPS In
+              </Button>
+            </div>
+          ) : !hasClockedOut ? (
+            <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 p-1.5 rounded-xl">
+              <span className="text-xs font-extrabold text-emerald-900 px-2 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                Checked In: {myTodayAttendance.checkIn}
+              </span>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => handleStandardPunch('OUT')}
+                leftIcon={<Clock className="w-4 h-4" />}
+                className="font-extrabold"
+              >
+                CHECK OUT
               </Button>
             </div>
           ) : (
-            <div className="text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
-              No employee profile linked to active session
+            <div className="flex items-center gap-2 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-800">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Checked Out: {myTodayAttendance.checkIn} ➔ {myTodayAttendance.checkOut}</span>
+              <Badge variant="success">✓ {formatDurationMinutes(myTodayAttendance.workDurationMinutes)}</Badge>
             </div>
-          )}
-
-          {currentEmployee && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setIsRegModalOpen(true)}
-              leftIcon={<Clock className="w-4 h-4" />}
-            >
-              Regularize
-            </Button>
-          )}
-
-          {(isSuperAdmin || isHR) && (
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => setIsPunchModalOpen(true)}
-              leftIcon={<Plus className="w-4 h-4" />}
-            >
-              Manual Punch Record
-            </Button>
           )}
 
           <Button
             size="sm"
             variant="outline"
-            onClick={handleExportAttendance}
+            onClick={() => setIsRegModalOpen(true)}
+            leftIcon={<Clock className="w-4 h-4" />}
+          >
+            Regularize
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const rows = filteredRecords.map(a => {
+                const emp = EmployeeService.getById(a.employeeId);
+                return {
+                  'Date': a.date,
+                  'Employee Code': emp?.employeeCode || 'N/A',
+                  'Employee Name': `${emp?.firstName} ${emp?.lastName}`,
+                  'Check In': a.checkIn || '—',
+                  'Check Out': a.checkOut || '—',
+                  'Status': a.status,
+                  'Work Duration': formatDurationMinutes(a.workDurationMinutes),
+                  'Source': a.punchSource,
+                  'Marked By': a.markedBy || 'System',
+                };
+              });
+              exportToExcel(`Attendance_Report_${selectedDate}.xlsx`, 'Daily Attendance', rows);
+            }}
             leftIcon={<Download className="w-4 h-4" />}
           >
-            Export Sheet
+            Export
           </Button>
         </div>
       </div>
 
-      {/* TAB 1: DAILY ATTENDANCE */}
+      {/* ============================================================= */}
+      {/* TAB 1: DAILY ATTENDANCE LOG                                   */}
+      {/* ============================================================= */}
       {activeTab === 'daily' && (
         <div className="space-y-4">
-          {/* Filter Bar */}
-          <div className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-500 uppercase">Date:</span>
+                <span className="text-xs font-bold text-slate-600">Date:</span>
                 <input
                   type="date"
                   value={selectedDate}
                   onChange={e => setSelectedDate(e.target.value)}
-                  className="bg-slate-100 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 outline-none"
+                  className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-brand-500"
                 />
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-500 uppercase">Status:</span>
+                <span className="text-xs font-bold text-slate-600">Status:</span>
                 <select
                   value={statusFilter}
                   onChange={e => setStatusFilter(e.target.value)}
-                  className="bg-slate-100 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                  className="bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 outline-none cursor-pointer"
                 >
                   <option value="all">All Statuses</option>
                   <option value="Present">Present</option>
                   <option value="Late Arrival">Late Arrival</option>
                   <option value="Half-Day">Half-Day</option>
                   <option value="Leave">Leave</option>
-                  <option value="Work From Home">Work From Home</option>
+                  <option value="Weekly Off">Weekly Off</option>
                   <option value="Absent">Absent</option>
                 </select>
               </div>
             </div>
 
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
                 type="text"
                 placeholder="Search employee..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 outline-none w-full sm:w-60 focus:border-brand-700"
+                className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none w-56"
               />
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
             </div>
           </div>
 
@@ -455,259 +523,409 @@ export const AttendanceModule: React.FC = () => {
             data={filteredRecords}
             keyExtractor={a => a.id}
             pageSize={10}
-            emptyMessage={`No attendance records found for ${formatDate(selectedDate)}.`}
+            emptyMessage="No attendance records found for the selected date and filters."
           />
         </div>
       )}
 
-      {/* TAB 2: ATTENDANCE REGULARIZATION */}
-      {activeTab === 'regularizations' && (
-        <Card
-          title="Attendance Regularization & Missing Punch Requests"
-          subtitle="Employees can request punch corrections due to missed punches, field duty, or technical glitches"
-        >
-          <div className="divide-y divide-slate-100">
-            {regularizations.length === 0 ? (
-              <div className="py-8 text-center text-slate-400 text-xs">
-                No attendance regularization requests pending.
-              </div>
-            ) : (
-              regularizations.map(reg => {
-                const emp = EmployeeService.getById(reg.employeeId);
-                const isPending = reg.status === 'pending';
-                return (
-                  <div key={reg.id} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-extrabold text-sm text-slate-900">
-                          {emp?.firstName} {emp?.lastName}
-                        </span>
-                        <span className="text-xs text-slate-400">({emp?.employeeCode})</span>
-                      </div>
-                      <div className="text-xs text-slate-600">
-                        Date: <span className="font-bold">{reg.date}</span> • Requested Time: {reg.requestedCheckIn} to {reg.requestedCheckOut} ({reg.requestedStatus})
-                      </div>
-                      <div className="text-xs text-slate-500 italic">
-                        "Reason: {reg.reason}"
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <Badge
-                        variant={
-                          reg.status === 'approved'
-                            ? 'success'
-                            : reg.status === 'rejected'
-                            ? 'danger'
-                            : 'warning'
-                        }
-                      >
-                        {reg.status.toUpperCase()}
-                      </Badge>
-
-                      {isPending && (isSuperAdmin || isHR || isManager) && (
-                        <div className="flex items-center gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="success"
-                            onClick={() => AttendanceService.approveRegularization(reg.id, currentUser.employeeId, true)}
-                          >
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="danger"
-                            onClick={() => AttendanceService.approveRegularization(reg.id, currentUser.employeeId, false, 'Invalid reason')}
-                          >
-                            Reject
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </Card>
-      )}
-
-      {/* TAB 3: BIOMETRIC HARDWARE GATEWAY */}
-      {activeTab === 'biometric' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card
-            title="Biometric Push Log Simulator"
-            subtitle="Simulates real-time hardware punch ingestion from Face Recognition and Optical Scanners"
-          >
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-slate-900 text-white font-mono text-xs space-y-2">
-                <div className="text-brand-400 font-bold">[GATEWAY] NovaPulse Cloud Biometric Daemon Active</div>
-                <div className="text-slate-400">Listening on port 8088 • TCP/LAN Push Protocol v2.4</div>
-                <div className="text-emerald-400">✓ Delhi HQ Reception Face Terminal (Device ID: NP-BIO-DEL-0192) CONNECTED</div>
-                <div className="text-emerald-400">✓ Mumbai Hub Biometric Gate 1 CONNECTED</div>
+      {/* ============================================================= */}
+      {/* TAB 2: MANUAL ATTENDANCE GRID (REDESIGNED)                     */}
+      {/* ============================================================= */}
+      {activeTab === 'manual' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Controls Bar */}
+          <div className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-brand-700" />
+                  <span>Manual Attendance Register</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Direct list-based attendance entry for field, factory, and non-biometric personnel.
+                </p>
               </div>
 
-              <div className="pt-2">
+              <div className="flex items-center gap-2">
                 <Button
-                  variant="primary"
-                  className="w-full"
-                  onClick={() => {
-                    // Ingest simulated biometric batch
-                    const sampleEmp = employees[Math.floor(Math.random() * employees.length)];
-                    AttendanceService.recordPunch({
-                      employeeId: sampleEmp.id,
-                      type: 'IN',
-                      time: '08:58:30',
-                      source: 'Biometric Machine',
-                    });
-                    alert(`Received real-time biometric push packet for ${sampleEmp.firstName} ${sampleEmp.lastName}!`);
-                  }}
-                  leftIcon={<Fingerprint className="w-4 h-4" />}
+                  size="sm"
+                  variant="outline"
+                  onClick={handleMarkAllPresent}
+                  leftIcon={<Check className="w-4 h-4 text-emerald-600" />}
                 >
-                  Simulate Random Biometric Clock-In Ingestion
+                  Mark All Present (P)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleSaveManualAttendance}
+                  leftIcon={<Save className="w-4 h-4" />}
+                  className="font-extrabold shadow-md"
+                >
+                  SAVE ATTENDANCE
                 </Button>
               </div>
             </div>
-          </Card>
 
-          <Card
-            title="Hardware Device Network Status"
-            subtitle="Active biometric terminals and synchronization health"
-          >
-            <div className="space-y-3">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
-                    <Fingerprint className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">Delhi HQ Main Reception</div>
-                    <div className="text-[10px] text-slate-500">NP-FaceBio 5000 • IP 192.168.1.50</div>
-                  </div>
-                </div>
-                <Badge variant="success">Online (99.9%)</Badge>
+            {/* Filter controls: Date, Department, Search */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Date</label>
+                <input
+                  type="date"
+                  value={manualDate}
+                  onChange={e => setManualDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-brand-500"
+                />
               </div>
 
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold text-xs">
-                    <Fingerprint className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900">Mumbai Tech Hub Gate 1</div>
-                    <div className="text-[10px] text-slate-500">NP-FaceBio 5000 • IP 192.168.2.40</div>
-                  </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Department</label>
+                <select
+                  value={manualDeptFilter}
+                  onChange={e => setManualDeptFilter(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none cursor-pointer"
+                >
+                  <option value="all">All Departments</option>
+                  {departments.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Search Employee</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search by name or code..."
+                    value={manualSearch}
+                    onChange={e => setManualSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 placeholder-slate-400 outline-none"
+                  />
+                  <Search className="w-3.5 h-3.5 absolute left-2.5 top-3 text-slate-400" />
                 </div>
-                <Badge variant="success">Online (100%)</Badge>
+              </div>
+            </div>
+
+            {manualSuccessMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{manualSuccessMsg}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Employee Attendance List Table */}
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-extrabold">
+                    <th className="py-3 px-4">Employee</th>
+                    <th className="py-3 px-3">Department</th>
+                    <th className="py-3 px-4 text-center">
+                      <div className="font-mono text-slate-800">Attendance Options</div>
+                      <div className="text-[10px] text-slate-400 font-normal mt-0.5">
+                        AB • P • WO • L • Late • HD
+                      </div>
+                    </th>
+                    <th className="py-3 px-4">Status & Source</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredManualEmployees.map(emp => {
+                    const selectedStatus = manualStatusMap[emp.id];
+                    const existingRecord = allAttendance.find(a => a.employeeId === emp.id && a.date === manualDate);
+                    const dept = departments.find(d => d.id === emp.departmentId);
+
+                    return (
+                      <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
+                        {/* Employee Identity */}
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={emp.avatarUrl || '/avatar.png'}
+                              alt=""
+                              className="w-8 h-8 rounded-lg object-cover border border-slate-200"
+                            />
+                            <div>
+                              <div className="font-extrabold text-slate-900">{emp.firstName} {emp.lastName}</div>
+                              <div className="text-[11px] text-slate-400 font-mono">{emp.employeeCode}</div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Department */}
+                        <td className="py-3 px-3 text-slate-600 font-medium">
+                          {dept?.name || 'General'}
+                        </td>
+
+                        {/* Segmented Radio Controls (AB, P, WO, L, Late, HD) */}
+                        <td className="py-3 px-4 text-center">
+                          <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
+                            {[
+                              { label: 'AB', status: 'Absent' as AttendanceStatus, color: 'text-rose-700 hover:bg-rose-100 active:bg-rose-200', activeBg: 'bg-rose-600 text-white font-extrabold shadow-xs' },
+                              { label: 'P', status: 'Present' as AttendanceStatus, color: 'text-emerald-700 hover:bg-emerald-100', activeBg: 'bg-emerald-600 text-white font-extrabold shadow-xs' },
+                              { label: 'WO', status: 'Weekly Off' as AttendanceStatus, color: 'text-slate-700 hover:bg-slate-200', activeBg: 'bg-slate-600 text-white font-extrabold shadow-xs' },
+                              { label: 'L', status: 'Leave' as AttendanceStatus, color: 'text-purple-700 hover:bg-purple-100', activeBg: 'bg-purple-600 text-white font-extrabold shadow-xs' },
+                              { label: 'Late', status: 'Late Arrival' as AttendanceStatus, color: 'text-amber-700 hover:bg-amber-100', activeBg: 'bg-amber-600 text-white font-extrabold shadow-xs' },
+                              { label: 'HD', status: 'Half-Day' as AttendanceStatus, color: 'text-sky-700 hover:bg-sky-100', activeBg: 'bg-sky-600 text-white font-extrabold shadow-xs' },
+                            ].map(opt => {
+                              const isChecked = selectedStatus === opt.status;
+                              return (
+                                <button
+                                  key={opt.label}
+                                  type="button"
+                                  onClick={() => {
+                                    setManualStatusMap(prev => ({ ...prev, [emp.id]: opt.status }));
+                                  }}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                    isChecked ? opt.activeBg : `text-slate-600 hover:bg-white`
+                                  }`}
+                                  title={`Mark ${opt.status}`}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </td>
+
+                        {/* Status & Indicator */}
+                        <td className="py-3 px-4">
+                          {existingRecord ? (
+                            <div className="space-y-0.5">
+                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                Recorded: {existingRecord.status}
+                              </span>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                Source: {existingRecord.punchSource || 'WEB'}
+                              </div>
+                            </div>
+                          ) : selectedStatus ? (
+                            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              Selected: {selectedStatus} (Unsaved)
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Not marked</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {filteredManualEmployees.length === 0 && (
+              <div className="text-center py-10 text-slate-400 text-xs">
+                No eligible employees match the current filters.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================= */}
+      {/* TAB 3: REGULARIZATION REQUESTS                                */}
+      {/* ============================================================= */}
+      {activeTab === 'regularizations' && (
+        <Card title="Attendance Regularization Workflow" subtitle="Employee-initiated exception and miss-punch adjustments">
+          <Table
+            columns={[
+              {
+                key: 'emp',
+                header: 'Employee',
+                render: (r) => {
+                  const emp = EmployeeService.getById(r.employeeId);
+                  return (
+                    <div>
+                      <div className="font-bold text-slate-900">{emp?.firstName} {emp?.lastName}</div>
+                      <div className="text-xs text-slate-400 font-mono">{emp?.employeeCode}</div>
+                    </div>
+                  );
+                },
+              },
+              { key: 'date', header: 'Date', render: (r) => <span className="font-mono text-xs">{r.date}</span> },
+              {
+                key: 'requested',
+                header: 'Requested Timings',
+                render: (r) => (
+                  <div className="font-mono text-xs">
+                    {r.requestedCheckIn} ➔ {r.requestedCheckOut} ({r.requestedStatus})
+                  </div>
+                ),
+              },
+              { key: 'reason', header: 'Reason', render: (r) => <span className="text-xs text-slate-600">{r.reason}</span> },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (r) => (
+                  <Badge variant={r.status === 'approved' ? 'success' : r.status === 'rejected' ? 'danger' : 'warning'}>
+                    {r.status}
+                  </Badge>
+                ),
+              },
+              {
+                key: 'action',
+                header: 'Action',
+                render: (r) => {
+                  if (r.status !== 'pending') return <span className="text-xs text-slate-400">Resolved</span>;
+                  if (!isSuperAdmin && !isHR && !isManager) return <span className="text-xs text-slate-400">Pending Review</span>;
+                  return (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="success"
+                        onClick={() => {
+                          AttendanceService.approveRegularization(r.id, currentEmployee?.id || 'emp-001', true);
+                        }}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        onClick={() => {
+                          AttendanceService.approveRegularization(r.id, currentEmployee?.id || 'emp-001', false);
+                        }}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  );
+                },
+              },
+            ]}
+            data={regularizations}
+            keyExtractor={r => r.id}
+            pageSize={10}
+            emptyMessage="No pending regularization requests."
+          />
+        </Card>
+      )}
+
+      {/* ============================================================= */}
+      {/* TAB 4: BIOMETRIC HARDWARE GATEWAY                             */}
+      {/* ============================================================= */}
+      {activeTab === 'biometric' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in duration-200">
+          <Card title="Biometric Cloud Gateway" subtitle="Direct real-time TCP/IP integration with physical biometric devices">
+            <div className="space-y-4">
+              <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm">Main Office Gate Terminal (ZKTeco ProFace)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-400/30">
+                    ONLINE
+                  </span>
+                </div>
+                <div className="font-mono text-xs text-slate-400">IP: 192.168.1.200 • Port: 4370 • Protocol: ADMS Cloud Push</div>
+                <div className="text-xs text-slate-300">Synchronized Punches Today: <span className="font-bold text-white">42 records</span></div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-sm">Plant & Factory Gate Terminal (Essl SilkBio)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-400/30">
+                    ONLINE
+                  </span>
+                </div>
+                <div className="font-mono text-xs text-slate-400">IP: 192.168.2.150 • Port: 4370 • Protocol: Push SDK</div>
+                <div className="text-xs text-slate-300">Synchronized Punches Today: <span className="font-bold text-white">18 records</span></div>
+              </div>
+            </div>
+          </Card>
+
+          <Card title="Hardware Gateway Status" subtitle="Continuous heartbeat and zero data loss buffer">
+            <div className="space-y-3 text-xs text-slate-600">
+              <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                <span>Polling Frequency</span>
+                <span className="font-bold font-mono">Real-time Webhook Push</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                <span>Total Terminals Configured</span>
+                <span className="font-bold font-mono">2 Units</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                <span>Biometric Data Buffer</span>
+                <span className="font-bold font-mono text-emerald-600">0 Pending (100% Synced)</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-slate-100">
+                <span>Last Gateway Sync</span>
+                <span className="font-bold font-mono">Just now (Auto-refresh)</span>
               </div>
             </div>
           </Card>
         </div>
       )}
 
-      {/* Manual Punch Modal */}
-      <Modal
-        isOpen={isPunchModalOpen}
-        onClose={() => setIsPunchModalOpen(false)}
-        title="Record Manual Attendance Punch"
-        subtitle="For authorized administrators to insert punch events"
-      >
-        <form onSubmit={handleManualPunch} className="space-y-4">
-          <Select
-            label="Employee"
-            value={punchForm.employeeId}
-            onChange={e => setPunchForm({ ...punchForm, employeeId: e.target.value })}
-            required
-          >
-            {employees.map(emp => (
-              <option key={emp.id} value={emp.id}>
-                {emp.firstName} {emp.lastName} ({emp.employeeCode})
-              </option>
-            ))}
-          </Select>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Select
-              label="Punch Event"
-              value={punchForm.type}
-              onChange={e => setPunchForm({ ...punchForm, type: e.target.value as any })}
-            >
-              <option value="IN">Clock IN</option>
-              <option value="OUT">Clock OUT</option>
-            </Select>
-
-            <Input
-              label="Time"
-              type="time"
-              step="1"
-              value={punchForm.time}
-              onChange={e => setPunchForm({ ...punchForm, time: e.target.value })}
-              required
-            />
-          </div>
-
-          <div className="pt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsPunchModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary">
-              Save Punch
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
       {/* Regularization Modal */}
-      <Modal
-        isOpen={isRegModalOpen}
-        onClose={() => setIsRegModalOpen(false)}
-        title="Submit Attendance Regularization"
-        subtitle="Provide reason and corrected timings for manager review"
-      >
-        <form onSubmit={handleApplyRegularization} className="space-y-4">
-          <Input
-            label="Date to Regularize"
-            type="date"
-            value={regForm.date}
-            onChange={e => setRegForm({ ...regForm, date: e.target.value })}
-            required
-          />
-
-          <div className="grid grid-cols-2 gap-4">
+      {isRegModalOpen && (
+        <Modal
+          isOpen={isRegModalOpen}
+          onClose={() => setIsRegModalOpen(false)}
+          title="Apply for Attendance Regularization"
+        >
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              if (!currentEmployee) return;
+              AttendanceService.submitRegularization({
+                employeeId: currentEmployee.id,
+                date: regForm.date,
+                requestedCheckIn: regForm.requestedCheckIn,
+                requestedCheckOut: regForm.requestedCheckOut,
+                requestedStatus: regForm.requestedStatus,
+                reason: regForm.reason,
+              });
+              setIsRegModalOpen(false);
+              alert('Regularization request submitted successfully.');
+            }}
+            className="space-y-4"
+          >
             <Input
-              label="Actual In Time"
-              type="time"
-              value={regForm.requestedCheckIn}
-              onChange={e => setRegForm({ ...regForm, requestedCheckIn: e.target.value })}
+              label="Date"
+              type="date"
+              value={regForm.date}
+              onChange={e => setRegForm({ ...regForm, date: e.target.value })}
               required
             />
-            <Input
-              label="Actual Out Time"
-              type="time"
-              value={regForm.requestedCheckOut}
-              onChange={e => setRegForm({ ...regForm, requestedCheckOut: e.target.value })}
-              required
-            />
-          </div>
-
-          <Input
-            label="Reason for Regularization"
-            placeholder="e.g. Biometric machine punch missed due to network latency / on-site meeting..."
-            value={regForm.reason}
-            onChange={e => setRegForm({ ...regForm, reason: e.target.value })}
-            required
-          />
-
-          <div className="pt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => setIsRegModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary">
-              Submit Request
-            </Button>
-          </div>
-        </form>
-      </Modal>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Requested Check-In"
+                type="time"
+                value={regForm.requestedCheckIn}
+                onChange={e => setRegForm({ ...regForm, requestedCheckIn: e.target.value })}
+                required
+              />
+              <Input
+                label="Requested Check-Out"
+                type="time"
+                value={regForm.requestedCheckOut}
+                onChange={e => setRegForm({ ...regForm, requestedCheckOut: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Reason for Adjustment</label>
+              <textarea
+                value={regForm.reason}
+                onChange={e => setRegForm({ ...regForm, reason: e.target.value })}
+                rows={3}
+                placeholder="Explain the reason for regularization (e.g. biometric reader failure, client meeting, outdoor duty)..."
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs outline-none focus:border-brand-500"
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsRegModalOpen(false)}>Cancel</Button>
+              <Button type="submit" variant="primary">Submit Regularization</Button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };
