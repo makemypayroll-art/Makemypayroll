@@ -19,28 +19,70 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { PLATFORM_DOMAIN, getTenantSubdomainUrl } from '../../config/appConfig';
 import { TenantService } from '../../services/tenantService';
+import { TenantHostService } from '../../services/tenantHostService';
 import { normalizeSlug } from '../../services/tenantResolver';
 
 export const PublicLandingPortal: React.FC = () => {
   const { isSuperAdmin, setAppEnvironment } = useAuth();
   const [searchSlug, setSearchSlug] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
   const [lookupResult, setLookupResult] = useState<{ found: boolean; tenant?: any; url?: string } | null>(null);
 
-  const handleLookup = (e: React.FormEvent) => {
+  const extractCandidateSlug = (input: string): string => {
+    let clean = input.trim().toLowerCase();
+    if (!clean) return '';
+
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      try {
+        const parsed = new URL(clean);
+        clean = parsed.hostname;
+      } catch {
+        clean = clean.replace(/^https?:\/\//, '').split('/')[0];
+      }
+    } else if (clean.includes('/')) {
+      clean = clean.split('/')[0];
+    }
+
+    if (clean.includes('.')) {
+      const sub = TenantHostService.extractSubdomain(clean);
+      if (sub) return sub;
+      const parts = clean.split('.');
+      if (parts[0]) return normalizeSlug(parts[0]);
+    }
+
+    return normalizeSlug(clean);
+  };
+
+  const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = normalizeSlug(searchSlug);
-    if (!clean) return;
+    const candidate = extractCandidateSlug(searchSlug);
+    if (!candidate) return;
 
-    const tenant =
-      TenantService.getBySubdomain(clean) ||
-      TenantService.getBySlug(clean) ||
-      TenantService.getById(clean);
+    setIsSearching(true);
+    setLookupResult(null);
 
-    if (tenant) {
-      const url = getTenantSubdomainUrl(tenant.slug || clean);
-      setLookupResult({ found: true, tenant, url });
-    } else {
+    try {
+      let tenant =
+        TenantService.getBySubdomain(candidate) ||
+        TenantService.getBySlug(candidate) ||
+        TenantService.getById(candidate) ||
+        TenantService.getByCode(candidate);
+
+      if (!tenant) {
+        tenant = (await TenantService.fetchTenantBySlugFromSupabase(candidate)) || undefined;
+      }
+
+      if (tenant) {
+        const url = getTenantSubdomainUrl(tenant.slug || candidate);
+        setLookupResult({ found: true, tenant, url });
+      } else {
+        setLookupResult({ found: false });
+      }
+    } catch (err) {
+      console.error('Tenant lookup error:', err);
       setLookupResult({ found: false });
+    } finally {
+      setIsSearching(false);
     }
   };
 
@@ -83,10 +125,6 @@ export const PublicLandingPortal: React.FC = () => {
           <h1 className="text-3xl sm:text-5xl font-black tracking-tight text-white max-w-2xl mx-auto leading-tight">
             Two-Portal Multi-Tenant SaaS Architecture
           </h1>
-
-          <p className="text-sm sm:text-base text-slate-400 max-w-xl mx-auto">
-            Clean operational separation between platform administrative controls and dedicated client organization workspaces.
-          </p>
         </div>
 
         {/* Portal Cards Grid */}
@@ -143,7 +181,7 @@ export const PublicLandingPortal: React.FC = () => {
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Enter organization slug (e.g. ignite)"
+                  placeholder="Enter organization slug (e.g. ignite or silaris)"
                   value={searchSlug}
                   onChange={e => {
                     setSearchSlug(e.target.value);
@@ -153,13 +191,21 @@ export const PublicLandingPortal: React.FC = () => {
                 />
                 <button
                   type="submit"
-                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-brand-400 hover:text-brand-300"
+                  disabled={isSearching}
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-brand-400 hover:text-brand-300 disabled:opacity-50"
                 >
                   <Search className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {lookupResult && (
+              {isSearching && (
+                <div className="text-xs text-slate-400 animate-pulse flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-brand-400 animate-ping" />
+                  <span>Resolving canonical organization...</span>
+                </div>
+              )}
+
+              {!isSearching && lookupResult && (
                 <div className="text-xs">
                   {lookupResult.found && lookupResult.tenant ? (
                     <a

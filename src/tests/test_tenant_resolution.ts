@@ -317,6 +317,36 @@ assert(
   `Employees: ${employees.length}, Attendance Records: ${attendanceRecords.length}, Leave Applications: ${leaveApplications.length}`
 );
 
+// ----------------------------------------------------
+// TEST 14: Legacy Route Resolution (/t/NP-000006 and /t/silaris)
+// ----------------------------------------------------
+const legacyPathContextId = TenantHostService.resolve('makemypayroll.com', '/t/NP-000006');
+assert(
+  legacyPathContextId.mode === 'legacy' && legacyPathContextId.tenantId === 'NP-000006' && legacyPathContextId.status === 'ACTIVE',
+  'Legacy route /t/NP-000006 correctly resolves Silaris Information Technologies',
+  `Mode: ${legacyPathContextId.mode}, Tenant ID: ${legacyPathContextId.tenantId}, Status: ${legacyPathContextId.status}`
+);
+
+const legacyPathContextSlug = TenantHostService.resolve('makemypayroll.com', '/t/silaris');
+assert(
+  legacyPathContextSlug.mode === 'legacy' && legacyPathContextSlug.tenantId === 'NP-000006' && legacyPathContextSlug.status === 'ACTIVE',
+  'Legacy route /t/silaris correctly resolves Silaris Information Technologies',
+  `Mode: ${legacyPathContextSlug.mode}, Tenant ID: ${legacyPathContextSlug.tenantId}, Status: ${legacyPathContextSlug.status}`
+);
+
+// ----------------------------------------------------
+// TEST 15: No Duplicate Silaris Tenant / Company Created
+// ----------------------------------------------------
+const allTenants = TenantService.getAll(true);
+const silarisTenants = allTenants.filter(
+  t => t.tenantId === 'NP-000006' || t.slug === 'silaris' || t.companyName.toLowerCase().includes('silaris')
+);
+assert(
+  silarisTenants.length === 1,
+  'Strict Uniqueness: Exactly ONE Silaris tenant record exists in registry (no duplicate)',
+  `Matching Silaris tenants count: ${silarisTenants.length}`
+);
+
 console.log('\n====================================================');
 console.log(`TEST RESULTS: ${passedTests} / ${totalTests} TESTS PASSED`);
 console.log('====================================================');
@@ -326,5 +356,6 @@ if (passedTests === totalTests) {
 } else {
   process.exit(1);
 }
+
 
 
