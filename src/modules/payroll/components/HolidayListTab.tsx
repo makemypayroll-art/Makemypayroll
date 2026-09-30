@@ -143,13 +143,13 @@ export const HolidayListTab: React.FC = () => {
         const dayOfWeek = d.toLocaleDateString('en-US', { weekday: 'short' });
         return (
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-center">
+            <div className="w-9 h-9 rounded-xl bg-slate-100 border border-slate-200 flex flex-col items-center justify-center text-center">
               <span className="text-[9px] font-black text-slate-500 uppercase">{dayOfWeek}</span>
-              <span className="text-xs font-black text-white">{d.getDate()}</span>
+              <span className="text-xs font-black text-slate-900">{d.getDate()}</span>
             </div>
             <div>
-              <span className="font-mono text-xs font-bold text-white">{formatDate(h.date)}</span>
-              <div className="text-[10px] text-slate-400">{d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
+              <span className="font-mono text-xs font-bold text-slate-800">{formatDate(h.date)}</span>
+              <div className="text-[10px] text-slate-500">{d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</div>
             </div>
           </div>
         );
@@ -159,9 +159,9 @@ export const HolidayListTab: React.FC = () => {
       key: 'name',
       header: 'Holiday Name',
       render: (h) => (
-        <div>
-          <span className="font-bold text-sm text-slate-100">{h.name}</span>
-          {h.description && <div className="text-xs text-slate-400">{h.description}</div>}
+        <div className="space-y-0.5">
+          <span className="font-extrabold text-sm text-slate-900 tracking-tight">{h.name}</span>
+          {h.description && <div className="text-[11px] text-slate-500 font-normal">{h.description}</div>}
         </div>
       ),
     },
@@ -169,7 +169,7 @@ export const HolidayListTab: React.FC = () => {
       key: 'type',
       header: 'Type',
       render: (h) => (
-        <Badge variant={h.isOptional ? 'warning' : 'success'} className="text-[10px] font-bold">
+        <Badge variant={h.isOptional ? 'warning' : 'success'} size="sm" className="text-[10px] font-semibold">
           {h.isOptional ? 'Optional / Restricted' : 'Mandatory Paid Holiday'}
         </Badge>
       ),
@@ -180,7 +180,7 @@ export const HolidayListTab: React.FC = () => {
       render: (h) => {
         if (!h.branchId) {
           return (
-            <div className="flex items-center gap-1.5 text-xs text-slate-300 font-medium">
+            <div className="flex items-center gap-1.5 text-xs text-slate-700 font-medium">
               <Building2 className="w-3.5 h-3.5 text-slate-400" />
               <span>All Branches</span>
             </div>
@@ -188,8 +188,8 @@ export const HolidayListTab: React.FC = () => {
         }
         const branch = branches.find(b => b.id === h.branchId);
         return (
-          <div className="flex items-center gap-1.5 text-xs text-brand-300 font-medium">
-            <Building2 className="w-3.5 h-3.5 text-brand-400" />
+          <div className="flex items-center gap-1.5 text-xs text-brand-700 font-semibold">
+            <Building2 className="w-3.5 h-3.5 text-brand-500" />
             <span>{branch?.name || h.branchId}</span>
           </div>
         );
@@ -205,18 +205,18 @@ export const HolidayListTab: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={() => handleOpenEdit(h)}
-            className="h-8 px-2.5 text-xs font-bold border-slate-700 hover:bg-slate-800 text-slate-200"
+            className="h-7 px-2.5 text-xs font-semibold border-slate-300 hover:bg-slate-100 text-slate-700 hover:text-slate-900"
           >
-            <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-400" />
+            <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-500" />
             <span>Edit</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => handleDelete(h)}
-            className="h-8 px-2.5 text-xs font-bold border-rose-900/50 hover:bg-rose-950/50 text-rose-300"
+            className="h-7 px-2.5 text-xs font-semibold border-rose-200 hover:bg-rose-50 text-rose-700 hover:border-rose-300"
           >
-            <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-400" />
+            <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-500" />
             <span>Delete</span>
           </Button>
         </div>
@@ -283,14 +283,15 @@ export const HolidayListTab: React.FC = () => {
       </div>
 
       {/* Holiday Table */}
-      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <Table
           data={holidays}
           columns={columns}
           keyExtractor={h => h.id}
           emptyMessage={`No holidays registered for year ${selectedYear}.`}
+          className="border-none shadow-none rounded-none"
         />
-      </Card>
+      </div>
 
       {/* Add / Edit Holiday Modal */}
       {isModalOpen && (

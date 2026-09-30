@@ -173,15 +173,13 @@ export const AttendancePolicyTab: React.FC = () => {
       key: 'name',
       header: 'Policy Name',
       render: (p) => (
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-sm text-slate-100">{p.name}</span>
-            {p.isDefault && (
-              <Badge variant="info" className="text-[10px] bg-brand-900 text-white font-bold">
-                Company Default
-              </Badge>
-            )}
-          </div>
+        <div className="flex items-center gap-2">
+          <span className="font-extrabold text-sm text-slate-900 tracking-tight">{p.name}</span>
+          {p.isDefault && (
+            <Badge variant="purple" size="sm" className="bg-purple-50 text-purple-800 border-purple-200 text-[10px] font-semibold">
+              Company Default
+            </Badge>
+          )}
         </div>
       ),
     },
@@ -189,8 +187,8 @@ export const AttendancePolicyTab: React.FC = () => {
       key: 'hours',
       header: 'Full / Half Day',
       render: (p) => (
-        <div className="font-mono text-xs text-slate-300">
-          <span className="font-bold text-white">{p.fullDayHours}h</span> Full • <span className="font-bold text-white">{p.halfDayHours}h</span> Half
+        <div className="font-mono text-xs text-slate-700">
+          <span className="font-bold text-slate-900">{p.fullDayHours}h</span> Full • <span className="font-bold text-slate-900">{p.halfDayHours}h</span> Half
         </div>
       ),
     },
@@ -199,10 +197,10 @@ export const AttendancePolicyTab: React.FC = () => {
       header: 'Grace & Penalty Rule',
       render: (p) => (
         <div className="text-xs space-y-0.5">
-          <div className="font-bold text-amber-400 font-mono">
+          <div className="font-bold text-amber-800 font-mono">
             {p.lateComingGraceMinutes}m Grace (Max {p.maxMonthlyLatenessAllowed}/mo)
           </div>
-          <div className="text-[11px] text-slate-400">
+          <div className="text-[11px] text-slate-500">
             {p.latePenaltyType === 'None' ? 'No penalty' : p.latePenaltyType === 'HalfDay' ? '0.5 Day LOP' : p.latePenaltyType === 'Deduction' ? `₹${p.latePenaltyValue} deduction` : 'Warning'}
           </div>
         </div>
@@ -214,11 +212,11 @@ export const AttendancePolicyTab: React.FC = () => {
       render: (p) => (
         <div className="text-xs">
           {p.enableOvertime ? (
-            <Badge variant="info" className="text-[10px] font-bold">
+            <Badge variant="info" size="sm" className="bg-sky-50 text-sky-800 border-sky-200 text-[10px] font-semibold">
               {p.overtimePayScale}x Multiplier
             </Badge>
           ) : (
-            <span className="text-slate-500 font-mono">Disabled</span>
+            <span className="text-slate-400 font-mono text-[11px]">Disabled</span>
           )}
         </div>
       ),
@@ -231,8 +229,8 @@ export const AttendancePolicyTab: React.FC = () => {
         return (
           <div className="flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-extrabold text-xs text-slate-200 font-mono">{count}</span>
-            <span className="text-xs text-slate-400">workforce</span>
+            <span className="font-extrabold text-xs text-slate-800 font-mono">{count}</span>
+            <span className="text-xs text-slate-500">workforce</span>
           </div>
         );
       },
@@ -241,7 +239,11 @@ export const AttendancePolicyTab: React.FC = () => {
       key: 'status',
       header: 'Status',
       render: (p) => (
-        <Badge variant={p.status === 'Active' ? 'success' : 'default'} className="text-[10px]">
+        <Badge
+          variant={p.status === 'Active' ? 'success' : 'default'}
+          size="sm"
+          className={p.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold text-[10px]' : 'bg-slate-100 text-slate-600 border-slate-200 font-bold text-[10px]'}
+        >
           {p.status}
         </Badge>
       ),
@@ -258,10 +260,10 @@ export const AttendancePolicyTab: React.FC = () => {
                 size="sm"
                 variant="outline"
                 onClick={() => handleToggleStatus(p)}
-                className={`h-8 px-2.5 text-xs font-bold ${
+                className={`h-7 px-2.5 text-xs font-semibold ${
                   p.status === 'Active'
-                    ? 'border-amber-900/40 text-amber-400 hover:bg-amber-950/40'
-                    : 'border-emerald-900/40 text-emerald-400 hover:bg-emerald-950/40'
+                    ? 'border-amber-200 text-amber-800 hover:bg-amber-50'
+                    : 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'
                 }`}
               >
                 {p.status === 'Active' ? 'Deactivate' : 'Activate'}
@@ -270,9 +272,9 @@ export const AttendancePolicyTab: React.FC = () => {
                 size="sm"
                 variant="outline"
                 onClick={() => handleOpenEditModal(p)}
-                className="h-8 px-2.5 text-xs font-bold border-slate-700 hover:bg-slate-800 text-slate-200"
+                className="h-7 px-2.5 text-xs font-semibold border-slate-300 hover:bg-slate-100 text-slate-700 hover:text-slate-900"
               >
-                <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-500" />
                 Edit
               </Button>
               {!p.isDefault && (
@@ -280,9 +282,9 @@ export const AttendancePolicyTab: React.FC = () => {
                   size="sm"
                   variant="outline"
                   onClick={() => handleDeletePolicy(p)}
-                  className="h-8 px-2.5 text-xs font-bold border-rose-900/50 hover:bg-rose-950/50 text-rose-300"
+                  className="h-7 px-2.5 text-xs font-semibold border-rose-200 hover:bg-rose-50 text-rose-700 hover:border-rose-300"
                 >
-                  <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-400" />
+                  <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-500" />
                   Delete
                 </Button>
               )}
@@ -323,15 +325,16 @@ export const AttendancePolicyTab: React.FC = () => {
       </div>
 
       {/* Policy Table */}
-      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <Table
           columns={policyColumns}
           data={policies}
           keyExtractor={p => p.id}
           pageSize={10}
           emptyMessage="No attendance policies configured."
+          className="border-none shadow-none rounded-none"
         />
-      </Card>
+      </div>
 
       {/* 4-Section Add / Edit Modal */}
       {isModalOpen && (

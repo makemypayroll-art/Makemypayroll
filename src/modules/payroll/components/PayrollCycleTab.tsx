@@ -149,15 +149,13 @@ export const PayrollCycleTab: React.FC = () => {
       key: 'name',
       header: 'Payroll Cycle Name',
       render: (c) => (
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-sm text-slate-100">{c.name}</span>
-            {c.isDefault && (
-              <Badge variant="info" className="text-[10px] bg-brand-900 text-white font-bold">
-                Company Default
-              </Badge>
-            )}
-          </div>
+        <div className="flex items-center gap-2">
+          <span className="font-extrabold text-sm text-slate-900 tracking-tight">{c.name}</span>
+          {c.isDefault && (
+            <Badge variant="purple" size="sm" className="bg-purple-50 text-purple-800 border-purple-200 text-[10px] font-semibold">
+              Company Default
+            </Badge>
+          )}
         </div>
       ),
     },
@@ -166,7 +164,7 @@ export const PayrollCycleTab: React.FC = () => {
       header: 'Cut-off Days',
       render: (c) => (
         <div>
-          <span className="font-mono font-bold text-xs bg-slate-950 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-800">
+          <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg border border-slate-200">
             {c.startDay === 1 ? '1st to End of Month' : `${c.startDay}th to ${c.endDay}th`}
           </span>
         </div>
@@ -179,8 +177,8 @@ export const PayrollCycleTab: React.FC = () => {
         const p = PayrollCycleService.calculatePeriodDates(c, 2026, 9);
         return (
           <div className="text-xs">
-            <div className="font-bold text-brand-400">{p.periodLabel}</div>
-            <div className="text-[10px] text-slate-400 font-mono">
+            <div className="font-bold text-brand-700">{p.periodLabel}</div>
+            <div className="text-[10px] text-slate-500 font-mono">
               {p.startDate} → {p.endDate} ({p.totalDays} days)
             </div>
           </div>
@@ -195,8 +193,8 @@ export const PayrollCycleTab: React.FC = () => {
         return (
           <div className="flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-extrabold text-xs text-slate-200 font-mono">{count}</span>
-            <span className="text-xs text-slate-400">workforce</span>
+            <span className="font-extrabold text-xs text-slate-800 font-mono">{count}</span>
+            <span className="text-xs text-slate-500">workforce</span>
           </div>
         );
       },
@@ -205,7 +203,11 @@ export const PayrollCycleTab: React.FC = () => {
       key: 'status',
       header: 'Status',
       render: (c) => (
-        <Badge variant={c.status === 'Active' ? 'success' : 'default'} className="text-[10px]">
+        <Badge
+          variant={c.status === 'Active' ? 'success' : 'default'}
+          size="sm"
+          className={c.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold text-[10px]' : 'bg-slate-100 text-slate-600 border-slate-200 font-bold text-[10px]'}
+        >
           {c.status}
         </Badge>
       ),
@@ -223,7 +225,7 @@ export const PayrollCycleTab: React.FC = () => {
                   size="sm"
                   variant="outline"
                   onClick={() => handleSetDefault(c)}
-                  className="h-8 px-2.5 text-xs font-bold border-slate-700 hover:bg-slate-800 text-slate-300"
+                  className="h-7 px-2.5 text-xs font-semibold border-slate-300 hover:bg-slate-100 text-slate-700 hover:text-slate-900"
                 >
                   Set Default
                 </Button>
@@ -232,10 +234,10 @@ export const PayrollCycleTab: React.FC = () => {
                 size="sm"
                 variant="outline"
                 onClick={() => handleToggleStatus(c)}
-                className={`h-8 px-2.5 text-xs font-bold ${
+                className={`h-7 px-2.5 text-xs font-semibold ${
                   c.status === 'Active'
-                    ? 'border-amber-900/40 text-amber-400 hover:bg-amber-950/40'
-                    : 'border-emerald-900/40 text-emerald-400 hover:bg-emerald-950/40'
+                    ? 'border-amber-200 text-amber-800 hover:bg-amber-50'
+                    : 'border-emerald-200 text-emerald-800 hover:bg-emerald-50'
                 }`}
               >
                 {c.status === 'Active' ? 'Deactivate' : 'Activate'}
@@ -244,9 +246,9 @@ export const PayrollCycleTab: React.FC = () => {
                 size="sm"
                 variant="outline"
                 onClick={() => handleOpenEditModal(c)}
-                className="h-8 px-2.5 text-xs font-bold border-slate-700 hover:bg-slate-800 text-slate-200"
+                className="h-7 px-2.5 text-xs font-semibold border-slate-300 hover:bg-slate-100 text-slate-700 hover:text-slate-900"
               >
-                <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-500" />
                 Edit
               </Button>
               {!c.isDefault && (
@@ -254,9 +256,9 @@ export const PayrollCycleTab: React.FC = () => {
                   size="sm"
                   variant="outline"
                   onClick={() => handleDeleteCycle(c)}
-                  className="h-8 px-2.5 text-xs font-bold border-rose-900/50 hover:bg-rose-950/50 text-rose-300"
+                  className="h-7 px-2.5 text-xs font-semibold border-rose-200 hover:bg-rose-50 text-rose-700 hover:border-rose-300"
                 >
-                  <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-400" />
+                  <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-500" />
                   Delete
                 </Button>
               )}
@@ -297,15 +299,16 @@ export const PayrollCycleTab: React.FC = () => {
       </div>
 
       {/* Cycle List Table */}
-      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <Table
           columns={cycleColumns}
           data={cycles}
           keyExtractor={c => c.id}
           pageSize={10}
           emptyMessage="No payroll cycles configured."
+          className="border-none shadow-none rounded-none"
         />
-      </Card>
+      </div>
 
       {/* Interactive Period Calculation Simulator */}
       <Card className="bg-slate-900 border-slate-800 p-5 shadow-xl space-y-4">

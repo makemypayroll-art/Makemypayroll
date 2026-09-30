@@ -131,14 +131,14 @@ export const DeductionsPenaltiesTab: React.FC = () => {
       key: 'name',
       header: 'Deduction Name & Type',
       render: (d) => (
-        <div>
+        <div className="space-y-0.5">
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-sm text-slate-100">{d.name}</span>
-            <Badge variant="danger" className="text-[10px] bg-rose-950 text-rose-300 border-rose-800">
+            <span className="font-extrabold text-sm text-slate-900 tracking-tight">{d.name}</span>
+            <Badge variant="danger" size="sm" className="bg-rose-50 text-rose-800 border border-rose-200 text-[10px] font-semibold">
               {d.deductionType}
             </Badge>
           </div>
-          {d.description && <div className="text-xs text-slate-400 mt-0.5">{d.description}</div>}
+          {d.description && <div className="text-[11px] text-slate-500 font-normal">{d.description}</div>}
         </div>
       ),
     },
@@ -148,16 +148,16 @@ export const DeductionsPenaltiesTab: React.FC = () => {
       render: (d) => (
         <div className="font-mono text-xs">
           {d.calculationMethod === 'FIXED' && (
-            <span className="text-rose-400 font-bold">-{formatCurrencyINR(d.value)} Fixed</span>
+            <span className="text-rose-700 font-bold">-{formatCurrencyINR(d.value)} Fixed</span>
           )}
           {d.calculationMethod === 'PERCENT_BASIC' && (
-            <span className="text-amber-400 font-bold">-{d.value}% of Basic Salary</span>
+            <span className="text-amber-800 font-bold">-{d.value}% of Basic Salary</span>
           )}
           {d.calculationMethod === 'PERCENT_GROSS' && (
-            <span className="text-amber-400 font-bold">-{d.value}% of Gross Salary</span>
+            <span className="text-amber-800 font-bold">-{d.value}% of Gross Salary</span>
           )}
           {d.calculationMethod === 'DAYS_LOP' && (
-            <span className="text-purple-400 font-bold">-{d.value}x Day Gross per occurrence</span>
+            <span className="text-purple-800 font-bold">-{d.value}x Day Gross per occurrence</span>
           )}
         </div>
       ),
@@ -167,10 +167,18 @@ export const DeductionsPenaltiesTab: React.FC = () => {
       header: 'Trigger & Execution',
       render: (d) => (
         <div className="flex items-center gap-1.5">
-          <Badge variant={d.isAutomatic ? 'success' : 'default'} className="text-[10px]">
-            {d.isAutomatic ? 'Auto-Triggered by Policy' : 'Manual Assignment'}
+          <Badge
+            variant={d.isAutomatic ? 'success' : 'default'}
+            size="sm"
+            className={d.isAutomatic ? 'bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px] font-semibold' : 'bg-slate-100 text-slate-700 border-slate-200 text-[10px] font-semibold'}
+          >
+            {d.isAutomatic ? 'Auto-Triggered' : 'Manual'}
           </Badge>
-          <Badge variant={d.isRecurring ? 'purple' : 'outline'} className="text-[10px]">
+          <Badge
+            variant={d.isRecurring ? 'purple' : 'outline'}
+            size="sm"
+            className={d.isRecurring ? 'bg-purple-50 text-purple-800 border-purple-200 text-[10px] font-semibold' : 'text-slate-600 border-slate-200 text-[10px] font-semibold'}
+          >
             {d.isRecurring ? 'Recurring' : 'One-Time'}
           </Badge>
         </div>
@@ -180,7 +188,11 @@ export const DeductionsPenaltiesTab: React.FC = () => {
       key: 'status',
       header: 'Status',
       render: (d) => (
-        <Badge variant={d.status === 'Active' ? 'success' : 'danger'} className="text-[10px]">
+        <Badge
+          variant={d.status === 'Active' ? 'success' : 'danger'}
+          size="sm"
+          className={d.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold text-[10px]' : 'bg-rose-50 text-rose-700 border-rose-200 font-bold text-[10px]'}
+        >
           {d.status}
         </Badge>
       ),
@@ -195,18 +207,18 @@ export const DeductionsPenaltiesTab: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={() => handleOpenEdit(d)}
-            className="h-8 px-2.5 text-xs font-bold border-slate-700 hover:bg-slate-800 text-slate-200"
+            className="h-7 px-2.5 text-xs font-semibold border-slate-300 hover:bg-slate-100 text-slate-700 hover:text-slate-900"
           >
-            <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-400" />
+            <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-500" />
             <span>Edit</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => handleDelete(d)}
-            className="h-8 px-2.5 text-xs font-bold border-rose-900/50 hover:bg-rose-950/50 text-rose-300"
+            className="h-7 px-2.5 text-xs font-semibold border-rose-200 hover:bg-rose-50 text-rose-700 hover:border-rose-300"
           >
-            <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-400" />
+            <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-500" />
             <span>Delete</span>
           </Button>
         </div>
@@ -242,14 +254,15 @@ export const DeductionsPenaltiesTab: React.FC = () => {
       </div>
 
       {/* Deduction Table */}
-      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <Table
           data={deductions}
           columns={columns}
           keyExtractor={d => d.id}
           emptyMessage="No deductions or penalties configured."
+          className="border-none shadow-none rounded-none"
         />
-      </Card>
+      </div>
 
       {/* Add / Edit Modal */}
       {isModalOpen && (

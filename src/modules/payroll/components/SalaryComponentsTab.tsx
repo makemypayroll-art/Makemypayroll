@@ -141,15 +141,15 @@ export const SalaryComponentsTab: React.FC = () => {
       key: 'name',
       header: 'Component Name & Type',
       render: (c) => (
-        <div>
+        <div className="space-y-0.5">
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-sm text-slate-100">{c.name}</span>
-            <Badge variant="purple" className="text-[10px]">
+            <span className="font-extrabold text-sm text-slate-900 tracking-tight">{c.name}</span>
+            <Badge variant="purple" size="sm" className="bg-purple-50 text-purple-800 border border-purple-200/80 font-semibold text-[10px]">
               {c.componentType}
             </Badge>
           </div>
-          <div className="text-xs text-slate-400 mt-0.5">
-            Display: <span className="font-mono text-slate-300">{c.payslipDisplayName || c.name}</span>
+          <div className="text-[11px] text-slate-500 font-normal">
+            Display: <span className="font-mono text-slate-600 font-medium">{c.payslipDisplayName || c.name}</span>
           </div>
         </div>
       ),
@@ -160,13 +160,13 @@ export const SalaryComponentsTab: React.FC = () => {
       render: (c) => (
         <div className="font-mono text-xs">
           {c.calculationMethod === 'FIXED' && (
-            <span className="text-emerald-400 font-bold">{formatCurrencyINR(c.value)} Fixed</span>
+            <span className="text-emerald-700 font-bold">{formatCurrencyINR(c.value)} Fixed</span>
           )}
           {c.calculationMethod === 'PERCENT_BASIC' && (
-            <span className="text-cyan-400 font-bold">{c.value}% of Basic Salary</span>
+            <span className="text-brand-700 font-bold">{c.value}% of Basic Salary</span>
           )}
           {c.calculationMethod === 'PERCENT_GROSS' && (
-            <span className="text-purple-400 font-bold">{c.value}% of Gross Salary</span>
+            <span className="text-purple-700 font-bold">{c.value}% of Gross Salary</span>
           )}
         </div>
       ),
@@ -176,20 +176,28 @@ export const SalaryComponentsTab: React.FC = () => {
       header: 'Statutory & Tax Rules',
       render: (c) => (
         <div className="flex flex-wrap gap-1">
-          <Badge variant={c.isTaxable ? 'warning' : 'default'} className="text-[9px]">
+          <Badge
+            variant={c.isTaxable ? 'warning' : 'default'}
+            size="sm"
+            className={c.isTaxable ? 'bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-semibold' : 'bg-slate-100 text-slate-700 border-slate-200 text-[10px] font-semibold'}
+          >
             {c.isTaxable ? 'Taxable' : 'Tax Exempt'}
           </Badge>
           {c.isPfApplicable && (
-            <Badge variant="purple" className="text-[9px]">
+            <Badge variant="purple" size="sm" className="bg-purple-50 text-purple-800 border-purple-200 text-[10px] font-semibold">
               PF Base
             </Badge>
           )}
           {c.isEsiApplicable && (
-            <Badge variant="info" className="text-[9px]">
+            <Badge variant="info" size="sm" className="bg-sky-50 text-sky-800 border-sky-200 text-[10px] font-semibold">
               ESI Base
             </Badge>
           )}
-          <Badge variant={c.isRecurring ? 'success' : 'outline'} className="text-[9px]">
+          <Badge
+            variant={c.isRecurring ? 'success' : 'outline'}
+            size="sm"
+            className={c.isRecurring ? 'bg-emerald-50 text-emerald-800 border-emerald-200 text-[10px] font-semibold' : 'text-slate-600 border-slate-200 text-[10px] font-semibold'}
+          >
             {c.isRecurring ? 'Recurring' : 'One-Time'}
           </Badge>
         </div>
@@ -199,7 +207,11 @@ export const SalaryComponentsTab: React.FC = () => {
       key: 'status',
       header: 'Status',
       render: (c) => (
-        <Badge variant={c.status === 'Active' ? 'success' : 'danger'} className="text-[10px]">
+        <Badge
+          variant={c.status === 'Active' ? 'success' : 'danger'}
+          size="sm"
+          className={c.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-bold text-[10px]' : 'bg-rose-50 text-rose-700 border-rose-200 font-bold text-[10px]'}
+        >
           {c.status}
         </Badge>
       ),
@@ -214,18 +226,18 @@ export const SalaryComponentsTab: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={() => handleOpenEdit(c)}
-            className="h-8 px-2.5 text-xs font-bold border-slate-700 hover:bg-slate-800 text-slate-200"
+            className="h-7 px-2.5 text-xs font-semibold border-slate-300 hover:bg-slate-100 text-slate-700 hover:text-slate-900"
           >
-            <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-400" />
+            <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-500" />
             <span>Edit</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => handleDelete(c)}
-            className="h-8 px-2.5 text-xs font-bold border-rose-900/50 hover:bg-rose-950/50 text-rose-300"
+            className="h-7 px-2.5 text-xs font-semibold border-rose-200 hover:bg-rose-50 text-rose-700 hover:border-rose-300"
           >
-            <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-400" />
+            <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-500" />
             <span>Delete</span>
           </Button>
         </div>
@@ -261,14 +273,15 @@ export const SalaryComponentsTab: React.FC = () => {
       </div>
 
       {/* Component Master Table */}
-      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <Table
           data={components}
           columns={columns}
           keyExtractor={c => c.id}
           emptyMessage="No salary components configured."
+          className="border-none shadow-none rounded-none"
         />
-      </Card>
+      </div>
 
       {/* Add / Edit Component Modal */}
       {isModalOpen && (
