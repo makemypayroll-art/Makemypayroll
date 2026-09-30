@@ -69,7 +69,8 @@ export const PayrollModule: React.FC = () => {
   const [dataVersion, setDataVersion] = useState(0);
 
   // Sub-tabs navigation
-  const [activeTab, setActiveTab] = useState<'runs' | 'payslips' | 'pf_esi' | 'tds' | 'loans' | 'advances' | 'reimbursements' | 'overtime' | 'settings' | 'config'>('runs');
+  const [activeTab, setActiveTab] = useState<'config' | 'runs' | 'payslips' | 'reports'>('config');
+  const [reportsSubTab, setReportsSubTab] = useState<'pf_esi' | 'tds' | 'loans' | 'advances' | 'reimbursements' | 'overtime' | 'settings'>('pf_esi');
 
   const [selectedMonth, setSelectedMonth] = useState(9); // September
   const [selectedYear, setSelectedYear] = useState(2026);
@@ -292,14 +293,11 @@ export const PayrollModule: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-white">Payroll & Statutory Compliance</h1>
+              <h1 className="text-xl font-black text-white">Payroll Management</h1>
               <Badge variant="success" className="text-[10px] uppercase font-mono tracking-wider">
                 India Compliance Ready
               </Badge>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              PF (12%), ESI (₹21k), TDS Tax Regimes, Loans EMI, Advances, Overtime & Payslips.
-            </p>
           </div>
         </div>
 
@@ -359,19 +357,13 @@ export const PayrollModule: React.FC = () => {
         </div>
       </div>
 
-      {/* Sub-Navigation Tabs */}
+      {/* Primary Sub-Navigation Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-800 pb-2 scrollbar-none text-xs font-bold">
         {[
-          { id: 'runs', label: 'Payroll Runs & Summary', icon: <Play className="w-3.5 h-3.5" /> },
-          { id: 'payslips', label: 'Payslips & Register', icon: <FileSpreadsheet className="w-3.5 h-3.5" /> },
-          { id: 'pf_esi', label: 'PF & ESI Compliance', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
-          { id: 'tds', label: 'Tax & TDS Regimes', icon: <Percent className="w-3.5 h-3.5" /> },
-          { id: 'loans', label: 'Employee Loans', icon: <Landmark className="w-3.5 h-3.5" /> },
-          { id: 'advances', label: 'Salary Advances', icon: <Coins className="w-3.5 h-3.5" /> },
-          { id: 'reimbursements', label: 'Reimbursements', icon: <Receipt className="w-3.5 h-3.5" /> },
-          { id: 'overtime', label: 'Overtime & Encashment', icon: <Clock className="w-3.5 h-3.5" /> },
-          { id: 'settings', label: 'Statutory Config', icon: <Sliders className="w-3.5 h-3.5" /> },
           { id: 'config', label: 'Payroll Configuration', icon: <Sliders className="w-3.5 h-3.5" /> },
+          { id: 'runs', label: 'Payroll Processing', icon: <Play className="w-3.5 h-3.5" /> },
+          { id: 'payslips', label: 'Payslips', icon: <FileSpreadsheet className="w-3.5 h-3.5" /> },
+          { id: 'reports', label: 'Payroll Reports', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
         ].map(tab => (
           <button
             key={tab.id}
@@ -388,7 +380,12 @@ export const PayrollModule: React.FC = () => {
         ))}
       </div>
 
-      {/* TAB 1: RUNS & DASHBOARD */}
+      {/* TAB 1: PAYROLL CONFIGURATION */}
+      {activeTab === 'config' && (
+        <PayrollConfigurationTab />
+      )}
+
+      {/* TAB 2: PAYROLL PROCESSING */}
       {activeTab === 'runs' && (
         <div className="space-y-6">
           {/* Top KPI Metrics Cards */}
@@ -449,11 +446,6 @@ export const PayrollModule: React.FC = () => {
                     {currentPeriod?.status || 'Draft'}
                   </Badge>
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {isLocked
-                    ? 'This payroll period is locked. Modifications are restricted and require administrative reopening.'
-                    : 'Payroll period is open for recalculation, loan sync, and approvals.'}
-                </p>
               </div>
             </div>
 
@@ -503,14 +495,11 @@ export const PayrollModule: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: PAYSLIPS REGISTER */}
+      {/* TAB 3: PAYSLIPS REGISTER */}
       {(activeTab === 'runs' || activeTab === 'payslips') && (
         <Card className="bg-slate-900 border-slate-800 p-5 space-y-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-white">Payroll Register & Payslips</h3>
-              <p className="text-xs text-slate-400">Comprehensive salary breakups for {selectedMonth}/{selectedYear}</p>
-            </div>
+            <h3 className="text-sm font-bold text-white">Payroll Register & Payslips</h3>
             <span className="text-xs font-mono text-slate-400">{payslips.length} Payslips Generated</span>
           </div>
 
@@ -572,529 +561,535 @@ export const PayrollModule: React.FC = () => {
         </Card>
       )}
 
-      {/* TAB 3: PF & ESI COMPLIANCE */}
-      {activeTab === 'pf_esi' && (
+      {/* TAB 4: PAYROLL REPORTS */}
+      {activeTab === 'reports' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* PF Configuration Card */}
-            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-950 border border-purple-700 flex items-center justify-center text-purple-300">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Employees' Provident Fund (EPF & EPS)</h3>
-                  <p className="text-xs text-slate-400">Statutory EPFO compliance parameters</p>
-                </div>
-              </div>
-
-              <div className="space-y-2.5 pt-2 border-t border-slate-800 text-xs text-slate-300">
-                <div className="flex items-center justify-between">
-                  <span>Mandatory Wage Ceiling:</span>
-                  <span className="font-mono font-bold text-white">₹{statutoryConfig.pfWageCeiling.toLocaleString('en-IN')} / month</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Employee PF Share:</span>
-                  <span className="font-mono font-bold text-purple-400">{statutoryConfig.pfEmployeeRate}% of PF Wage (Basic)</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Employer EPS Share:</span>
-                  <span className="font-mono font-bold text-emerald-400">{statutoryConfig.pfEmployerEpsRate}% (Max ₹1,250)</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Employer EPF Share:</span>
-                  <span className="font-mono font-bold text-brand-400">{statutoryConfig.pfEmployerEpfRate}% of PF Wage</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Admin & EDLI Charges:</span>
-                  <span className="font-mono font-bold text-slate-400">1.0% (0.5% Admin + 0.5% EDLI)</span>
-                </div>
-              </div>
-            </Card>
-
-            {/* ESI Configuration Card */}
-            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-cyan-950 border border-cyan-700 flex items-center justify-center text-cyan-300">
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white">Employees' State Insurance (ESI)</h3>
-                  <p className="text-xs text-slate-400">ESIC medical & social security rules</p>
-                </div>
-              </div>
-
-              <div className="space-y-2.5 pt-2 border-t border-slate-800 text-xs text-slate-300">
-                <div className="flex items-center justify-between">
-                  <span>Gross Wage Eligibility Ceiling:</span>
-                  <span className="font-mono font-bold text-white">₹{statutoryConfig.esiGrossWageThreshold.toLocaleString('en-IN')} / month</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Employee ESI Rate:</span>
-                  <span className="font-mono font-bold text-cyan-400">{statutoryConfig.esiEmployeeRate}% of Gross Wages</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Employer ESI Rate:</span>
-                  <span className="font-mono font-bold text-emerald-400">{statutoryConfig.esiEmployerRate}% of Gross Wages</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Total Contribution:</span>
-                  <span className="font-mono font-bold text-white">4.0% of Gross Wages</span>
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: TAX & TDS REGIMES */}
-      {activeTab === 'tds' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* New Tax Regime */}
-            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Percent className="w-5 h-5 text-purple-400" />
-                  <h3 className="text-base font-bold text-white">New Tax Regime (Section 115BAC)</h3>
-                </div>
-                <Badge variant="purple">Default</Badge>
-              </div>
-
-              <p className="text-xs text-slate-400">Standard Deduction: ₹75,000 • Section 87A rebate up to ₹7,00,000 income (zero tax)</p>
-
-              <div className="overflow-x-auto border border-slate-800 rounded-xl">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-950 text-slate-400">
-                    <tr>
-                      <th className="p-2">Income Slab</th>
-                      <th className="p-2 text-right">Tax Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 text-slate-300">
-                    <tr><td className="p-2">Up to ₹3,00,000</td><td className="p-2 text-right font-mono text-emerald-400">Nil</td></tr>
-                    <tr><td className="p-2">₹3,00,001 - ₹7,00,000</td><td className="p-2 text-right font-mono">5%</td></tr>
-                    <tr><td className="p-2">₹7,00,001 - ₹10,00,000</td><td className="p-2 text-right font-mono">10%</td></tr>
-                    <tr><td className="p-2">₹10,00,001 - ₹12,00,000</td><td className="p-2 text-right font-mono">15%</td></tr>
-                    <tr><td className="p-2">₹12,00,001 - ₹15,00,000</td><td className="p-2 text-right font-mono">20%</td></tr>
-                    <tr><td className="p-2">Above ₹15,00,000</td><td className="p-2 text-right font-mono text-rose-400">30%</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-
-            {/* Old Tax Regime */}
-            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Percent className="w-5 h-5 text-brand-400" />
-                  <h3 className="text-base font-bold text-white">Old Tax Regime with Deductions</h3>
-                </div>
-                <Badge variant="outline">Optional</Badge>
-              </div>
-
-              <p className="text-xs text-slate-400">Standard Deduction: ₹50,000 • Supports Section 80C (₹1.5L), 80D, HRA & Section 24</p>
-
-              <div className="overflow-x-auto border border-slate-800 rounded-xl">
-                <table className="w-full text-xs text-left">
-                  <thead className="bg-slate-950 text-slate-400">
-                    <tr>
-                      <th className="p-2">Income Slab</th>
-                      <th className="p-2 text-right">Tax Rate</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800 text-slate-300">
-                    <tr><td className="p-2">Up to ₹2,50,000</td><td className="p-2 text-right font-mono text-emerald-400">Nil</td></tr>
-                    <tr><td className="p-2">₹2,50,001 - ₹5,00,000</td><td className="p-2 text-right font-mono">5%</td></tr>
-                    <tr><td className="p-2">₹5,00,001 - ₹10,00,000</td><td className="p-2 text-right font-mono">20%</td></tr>
-                    <tr><td className="p-2">Above ₹10,00,000</td><td className="p-2 text-right font-mono text-rose-400">30%</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 5: LOANS */}
-      {activeTab === 'loans' && (
-        <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-white">Employee Loan Management</h3>
-              <p className="text-xs text-slate-400">Automatic monthly EMI deductions during payroll</p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setIsNewLoanOpen(true)}
-              className="text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              <span>Create Loan</span>
-            </Button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
-                <tr>
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Loan Type</th>
-                  <th className="p-3">Principal</th>
-                  <th className="p-3">Tenure</th>
-                  <th className="p-3">Monthly EMI</th>
-                  <th className="p-3">Outstanding</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-300">
-                {loans.map(l => (
-                  <tr key={l.id} className="hover:bg-slate-800/40">
-                    <td className="p-3 font-bold text-white">{l.employeeName}</td>
-                    <td className="p-3">{l.loanType}</td>
-                    <td className="p-3 font-bold">{formatCurrencyINR(l.principalAmount)}</td>
-                    <td className="p-3">{l.emisPaidCount}/{l.tenureMonths} Months</td>
-                    <td className="p-3 text-amber-400 font-bold">{formatCurrencyINR(l.monthlyEmi)}</td>
-                    <td className="p-3 font-mono">{formatCurrencyINR(l.outstandingPrincipal)}</td>
-                    <td className="p-3">
-                      <Badge variant={l.status === 'Active' ? 'success' : l.status === 'Completed' ? 'purple' : 'warning'}>
-                        {l.status}
-                      </Badge>
-                    </td>
-                    <td className="p-3 text-right space-x-2">
-                      {l.status === 'Pending Approval' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            PayrollLoanService.approveAndDisburse(l.id, currentUser.fullName || currentUser.email);
-                            setDataVersion(v => v + 1);
-                          }}
-                          className="text-[10px] font-bold text-emerald-400 border-emerald-800"
-                        >
-                          Approve & Disburse
-                        </Button>
-                      )}
-                      {l.status === 'Active' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            PayrollLoanService.togglePauseDeduction(l.id, true, currentUser.fullName || currentUser.email);
-                            setDataVersion(v => v + 1);
-                          }}
-                          className="text-[10px] font-bold text-amber-400 border-amber-800"
-                        >
-                          Pause EMI
-                        </Button>
-                      )}
-                      {l.status === 'Paused' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            PayrollLoanService.togglePauseDeduction(l.id, false, currentUser.fullName || currentUser.email);
-                            setDataVersion(v => v + 1);
-                          }}
-                          className="text-[10px] font-bold text-emerald-400 border-emerald-800"
-                        >
-                          Resume EMI
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* TAB 6: ADVANCES */}
-      {activeTab === 'advances' && (
-        <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-white">Salary Advance Management</h3>
-              <p className="text-xs text-slate-400">Emergency salary advances with installment recovery</p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setIsNewAdvanceOpen(true)}
-              className="text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              <span>Request Advance</span>
-            </Button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
-                <tr>
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Advance Amount</th>
-                  <th className="p-3">Reason</th>
-                  <th className="p-3">Monthly Recovery</th>
-                  <th className="p-3">Outstanding</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-300">
-                {advances.map(a => (
-                  <tr key={a.id} className="hover:bg-slate-800/40">
-                    <td className="p-3 font-bold text-white">{a.employeeName}</td>
-                    <td className="p-3 font-bold">{formatCurrencyINR(a.advanceAmount)}</td>
-                    <td className="p-3 text-slate-400">{a.reason}</td>
-                    <td className="p-3 text-amber-400">{formatCurrencyINR(a.recoveryMonthlyAmount)}/mo ({a.installmentsRecoveredCount}/{a.installmentsCount})</td>
-                    <td className="p-3 font-mono font-bold">{formatCurrencyINR(a.outstandingAmount)}</td>
-                    <td className="p-3">
-                      <Badge variant={a.status === 'Active' || a.status === 'Recovered' ? 'success' : 'warning'}>
-                        {a.status}
-                      </Badge>
-                    </td>
-                    <td className="p-3 text-right">
-                      {a.status === 'Pending' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            PayrollAdvanceService.approveAdvance(a.id, a.advanceAmount, currentUser.fullName || currentUser.email);
-                            setDataVersion(v => v + 1);
-                          }}
-                          className="text-[10px] font-bold text-emerald-400 border-emerald-800"
-                        >
-                          Approve
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* TAB 7: REIMBURSEMENTS */}
-      {activeTab === 'reimbursements' && (
-        <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-white">Expense Reimbursements</h3>
-              <p className="text-xs text-slate-400">Claims for Travel, Food, Medical, Mobile, Internet & Fuel</p>
-            </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setIsNewReimbursementOpen(true)}
-              className="text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              <span>Submit Claim</span>
-            </Button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
-                <tr>
-                  <th className="p-3">Employee</th>
-                  <th className="p-3">Expense Type</th>
-                  <th className="p-3">Date</th>
-                  <th className="p-3">Claim Amount</th>
-                  <th className="p-3">Description</th>
-                  <th className="p-3">Payout Method</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Approvals</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800 text-slate-300">
-                {reimbursements.map(r => (
-                  <tr key={r.id} className="hover:bg-slate-800/40">
-                    <td className="p-3 font-bold text-white">{r.employeeName}</td>
-                    <td className="p-3"><Badge variant="outline">{r.expenseType}</Badge></td>
-                    <td className="p-3 text-slate-400">{r.expenseDate}</td>
-                    <td className="p-3 font-bold text-white">{formatCurrencyINR(r.amount)}</td>
-                    <td className="p-3 text-slate-400">{r.description}</td>
-                    <td className="p-3 font-mono text-purple-300">{r.payoutMethod}</td>
-                    <td className="p-3">
-                      <Badge variant={r.status === 'Paid' ? 'success' : r.status === 'Approved' ? 'purple' : 'warning'}>
-                        {r.status}
-                      </Badge>
-                    </td>
-                    <td className="p-3 text-right space-x-1.5">
-                      {r.status === 'Submitted' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            PayrollReimbursementService.managerApprove(r.id, currentUser.fullName || currentUser.email);
-                            setDataVersion(v => v + 1);
-                          }}
-                          className="text-[10px] font-bold text-cyan-400 border-cyan-800"
-                        >
-                          Manager Approve
-                        </Button>
-                      )}
-                      {(r.status === 'Submitted' || r.status === 'Manager Approved') && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            PayrollReimbursementService.hrApprove(r.id, r.amount, currentUser.fullName || currentUser.email);
-                            setDataVersion(v => v + 1);
-                          }}
-                          className="text-[10px] font-bold text-emerald-400 border-emerald-800"
-                        >
-                          Final HR Approve
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* TAB 8: OVERTIME & ENCASHMENT */}
-      {activeTab === 'overtime' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Overtime Records */}
-          <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-            <h3 className="text-sm font-bold text-white">Overtime Hours & Pay</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-950 text-slate-400">
-                  <tr>
-                    <th className="p-2">Employee</th>
-                    <th className="p-2">Date</th>
-                    <th className="p-2">OT Hours</th>
-                    <th className="p-2">OT Pay</th>
-                    <th className="p-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 text-slate-300">
-                  {overtimeRecords.map(o => (
-                    <tr key={o.id}>
-                      <td className="p-2 font-bold text-white">{o.employeeName}</td>
-                      <td className="p-2 text-slate-400">{o.date}</td>
-                      <td className="p-2 font-bold">{o.otHours}h ({o.multiplier}x)</td>
-                      <td className="p-2 text-emerald-400 font-bold">{formatCurrencyINR(o.otAmount)}</td>
-                      <td className="p-2"><Badge variant={o.status === 'Processed' ? 'success' : 'warning'}>{o.status}</Badge></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          {/* Leave Encashments */}
-          <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white">Leave Encashments</h3>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsNewEncashmentOpen(true)}
-                className="text-xs font-bold"
+          {/* Reports Sub-Navigation */}
+          <div className="flex items-center gap-2 overflow-x-auto border-b border-slate-800 pb-2 scrollbar-none text-xs font-semibold">
+            {[
+              { id: 'pf_esi', label: 'PF & ESI Compliance', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
+              { id: 'tds', label: 'TDS & Tax Regimes', icon: <Percent className="w-3.5 h-3.5" /> },
+              { id: 'loans', label: 'Employee Loans', icon: <Landmark className="w-3.5 h-3.5" /> },
+              { id: 'advances', label: 'Salary Advances', icon: <CreditCard className="w-3.5 h-3.5" /> },
+              { id: 'reimbursements', label: 'Reimbursements', icon: <Receipt className="w-3.5 h-3.5" /> },
+              { id: 'overtime', label: 'Overtime & Encashment', icon: <Clock className="w-3.5 h-3.5" /> },
+              { id: 'settings', label: 'Statutory Settings', icon: <Sliders className="w-3.5 h-3.5" /> },
+            ].map(sub => (
+              <button
+                key={sub.id}
+                onClick={() => setReportsSubTab(sub.id as any)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                  reportsSubTab === sub.id
+                    ? 'bg-slate-800 text-white font-bold border border-slate-700'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                }`}
               >
-                <Plus className="w-3 h-3 mr-1" />
-                <span>Request Encashment</span>
-              </Button>
+                {sub.icon}
+                <span>{sub.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Report Sub-Tab: PF & ESI */}
+          {reportsSubTab === 'pf_esi' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* PF Configuration Card */}
+              <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-950 border border-purple-700 flex items-center justify-center text-purple-300">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Employees' Provident Fund (EPF & EPS)</h3>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 pt-2 border-t border-slate-800 text-xs text-slate-300">
+                  <div className="flex items-center justify-between">
+                    <span>Mandatory Wage Ceiling:</span>
+                    <span className="font-mono font-bold text-white">₹{statutoryConfig.pfWageCeiling.toLocaleString('en-IN')} / month</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Employee PF Share:</span>
+                    <span className="font-mono font-bold text-purple-400">{statutoryConfig.pfEmployeeRate}% of PF Wage (Basic)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Employer EPS Share:</span>
+                    <span className="font-mono font-bold text-emerald-400">{statutoryConfig.pfEmployerEpsRate}% (Max ₹1,250)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Employer EPF Share:</span>
+                    <span className="font-mono font-bold text-brand-400">{statutoryConfig.pfEmployerEpfRate}% of PF Wage</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Admin & EDLI Charges:</span>
+                    <span className="font-mono font-bold text-slate-400">1.0% (0.5% Admin + 0.5% EDLI)</span>
+                  </div>
+                </div>
+              </Card>
+
+              {/* ESI Configuration Card */}
+              <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-950 border border-cyan-700 flex items-center justify-center text-cyan-300">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Employees' State Insurance (ESI)</h3>
+                  </div>
+                </div>
+
+                <div className="space-y-2.5 pt-2 border-t border-slate-800 text-xs text-slate-300">
+                  <div className="flex items-center justify-between">
+                    <span>Gross Wage Eligibility Ceiling:</span>
+                    <span className="font-mono font-bold text-white">₹{statutoryConfig.esiGrossWageThreshold.toLocaleString('en-IN')} / month</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Employee ESI Rate:</span>
+                    <span className="font-mono font-bold text-cyan-400">{statutoryConfig.esiEmployeeRate}% of Gross Wages</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Employer ESI Rate:</span>
+                    <span className="font-mono font-bold text-emerald-400">{statutoryConfig.esiEmployerRate}% of Gross Wages</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Total Contribution:</span>
+                    <span className="font-mono font-bold text-white">4.0% of Gross Wages</span>
+                  </div>
+                </div>
+              </Card>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead className="bg-slate-950 text-slate-400">
-                  <tr>
-                    <th className="p-2">Employee</th>
-                    <th className="p-2">Leave Type</th>
-                    <th className="p-2">Days</th>
-                    <th className="p-2">Amount</th>
-                    <th className="p-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800 text-slate-300">
-                  {encashments.map(e => (
-                    <tr key={e.id}>
-                      <td className="p-2 font-bold text-white">{e.employeeName}</td>
-                      <td className="p-2">{e.leaveTypeName}</td>
-                      <td className="p-2 font-bold">{e.encashedDays} Days</td>
-                      <td className="p-2 text-emerald-400 font-bold">{formatCurrencyINR(e.encashmentAmount)}</td>
-                      <td className="p-2"><Badge variant={e.status === 'Processed' ? 'success' : 'warning'}>{e.status}</Badge></td>
+          )}
+
+          {/* Report Sub-Tab: TDS */}
+          {reportsSubTab === 'tds' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* New Tax Regime */}
+              <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Percent className="w-5 h-5 text-purple-400" />
+                    <h3 className="text-base font-bold text-white">New Tax Regime (Section 115BAC)</h3>
+                  </div>
+                  <Badge variant="purple">Default</Badge>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-800 rounded-xl">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-950 text-slate-400">
+                      <tr>
+                        <th className="p-2">Income Slab</th>
+                        <th className="p-2 text-right">Tax Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300">
+                      <tr><td className="p-2">Up to ₹3,00,000</td><td className="p-2 text-right font-mono text-emerald-400">Nil</td></tr>
+                      <tr><td className="p-2">₹3,00,001 - ₹7,00,000</td><td className="p-2 text-right font-mono">5%</td></tr>
+                      <tr><td className="p-2">₹7,00,001 - ₹10,00,000</td><td className="p-2 text-right font-mono">10%</td></tr>
+                      <tr><td className="p-2">₹10,00,001 - ₹12,00,000</td><td className="p-2 text-right font-mono">15%</td></tr>
+                      <tr><td className="p-2">₹12,00,001 - ₹15,00,000</td><td className="p-2 text-right font-mono">20%</td></tr>
+                      <tr><td className="p-2">Above ₹15,00,000</td><td className="p-2 text-right font-mono text-rose-400">30%</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Old Tax Regime */}
+              <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Percent className="w-5 h-5 text-brand-400" />
+                    <h3 className="text-base font-bold text-white">Old Tax Regime with Deductions</h3>
+                  </div>
+                  <Badge variant="outline">Optional</Badge>
+                </div>
+
+                <div className="overflow-x-auto border border-slate-800 rounded-xl">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-950 text-slate-400">
+                      <tr>
+                        <th className="p-2">Income Slab</th>
+                        <th className="p-2 text-right">Tax Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300">
+                      <tr><td className="p-2">Up to ₹2,50,000</td><td className="p-2 text-right font-mono text-emerald-400">Nil</td></tr>
+                      <tr><td className="p-2">₹2,50,001 - ₹5,00,000</td><td className="p-2 text-right font-mono">5%</td></tr>
+                      <tr><td className="p-2">₹5,00,001 - ₹10,00,000</td><td className="p-2 text-right font-mono">20%</td></tr>
+                      <tr><td className="p-2">Above ₹10,00,000</td><td className="p-2 text-right font-mono text-rose-400">30%</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
+          )}
+
+          {/* Report Sub-Tab: Loans */}
+          {reportsSubTab === 'loans' && (
+            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Employee Loan Management</h3>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setIsNewLoanOpen(true)}
+                  className="text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  <span>Create Loan</span>
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">Employee</th>
+                      <th className="p-3">Loan Type</th>
+                      <th className="p-3">Principal</th>
+                      <th className="p-3">Tenure</th>
+                      <th className="p-3">Monthly EMI</th>
+                      <th className="p-3">Outstanding</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-slate-300">
+                    {loans.map(l => (
+                      <tr key={l.id} className="hover:bg-slate-800/40">
+                        <td className="p-3 font-bold text-white">{l.employeeName}</td>
+                        <td className="p-3">{l.loanType}</td>
+                        <td className="p-3 font-bold">{formatCurrencyINR(l.principalAmount)}</td>
+                        <td className="p-3">{l.emisPaidCount}/{l.tenureMonths} Months</td>
+                        <td className="p-3 text-amber-400 font-bold">{formatCurrencyINR(l.monthlyEmi)}</td>
+                        <td className="p-3 font-mono">{formatCurrencyINR(l.outstandingPrincipal)}</td>
+                        <td className="p-3">
+                          <Badge variant={l.status === 'Active' ? 'success' : l.status === 'Completed' ? 'purple' : 'warning'}>
+                            {l.status}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-right space-x-2">
+                          {l.status === 'Pending Approval' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                PayrollLoanService.approveAndDisburse(l.id, currentUser.fullName || currentUser.email);
+                                setDataVersion(v => v + 1);
+                              }}
+                              className="text-[10px] font-bold text-emerald-400 border-emerald-800"
+                            >
+                              Approve & Disburse
+                            </Button>
+                          )}
+                          {l.status === 'Active' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                PayrollLoanService.togglePauseDeduction(l.id, true, currentUser.fullName || currentUser.email);
+                                setDataVersion(v => v + 1);
+                              }}
+                              className="text-[10px] font-bold text-amber-400 border-amber-800"
+                            >
+                              Pause EMI
+                            </Button>
+                          )}
+                          {l.status === 'Paused' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                PayrollLoanService.togglePauseDeduction(l.id, false, currentUser.fullName || currentUser.email);
+                                setDataVersion(v => v + 1);
+                              }}
+                              className="text-[10px] font-bold text-emerald-400 border-emerald-800"
+                            >
+                              Resume EMI
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* Report Sub-Tab: Advances */}
+          {reportsSubTab === 'advances' && (
+            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Salary Advance Management</h3>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setIsNewAdvanceOpen(true)}
+                  className="text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  <span>Request Advance</span>
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">Employee</th>
+                      <th className="p-3">Advance Amount</th>
+                      <th className="p-3">Reason</th>
+                      <th className="p-3">Monthly Recovery</th>
+                      <th className="p-3">Outstanding</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-slate-300">
+                    {advances.map(a => (
+                      <tr key={a.id} className="hover:bg-slate-800/40">
+                        <td className="p-3 font-bold text-white">{a.employeeName}</td>
+                        <td className="p-3 font-bold">{formatCurrencyINR(a.advanceAmount)}</td>
+                        <td className="p-3 text-slate-400">{a.reason}</td>
+                        <td className="p-3 text-amber-400">{formatCurrencyINR(a.recoveryMonthlyAmount)}/mo ({a.installmentsRecoveredCount}/{a.installmentsCount})</td>
+                        <td className="p-3 font-mono font-bold">{formatCurrencyINR(a.outstandingAmount)}</td>
+                        <td className="p-3">
+                          <Badge variant={a.status === 'Active' || a.status === 'Recovered' ? 'success' : 'warning'}>
+                            {a.status}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-right">
+                          {a.status === 'Pending' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                PayrollAdvanceService.approveAdvance(a.id, a.advanceAmount, currentUser.fullName || currentUser.email);
+                                setDataVersion(v => v + 1);
+                              }}
+                              className="text-[10px] font-bold text-emerald-400 border-emerald-800"
+                            >
+                              Approve
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* Report Sub-Tab: Reimbursements */}
+          {reportsSubTab === 'reimbursements' && (
+            <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Expense Reimbursements</h3>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setIsNewReimbursementOpen(true)}
+                  className="text-xs font-bold bg-cyan-600 hover:bg-cyan-500 text-white"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  <span>Submit Claim</span>
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-950 text-slate-400 font-bold border-b border-slate-800">
+                    <tr>
+                      <th className="p-3">Employee</th>
+                      <th className="p-3">Expense Type</th>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Claim Amount</th>
+                      <th className="p-3">Description</th>
+                      <th className="p-3">Payout Method</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Approvals</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 text-slate-300">
+                    {reimbursements.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-800/40">
+                        <td className="p-3 font-bold text-white">{r.employeeName}</td>
+                        <td className="p-3"><Badge variant="outline">{r.expenseType}</Badge></td>
+                        <td className="p-3 text-slate-400">{r.expenseDate}</td>
+                        <td className="p-3 font-bold text-white">{formatCurrencyINR(r.amount)}</td>
+                        <td className="p-3 text-slate-400">{r.description}</td>
+                        <td className="p-3 font-mono text-purple-300">{r.payoutMethod}</td>
+                        <td className="p-3">
+                          <Badge variant={r.status === 'Paid' ? 'success' : r.status === 'Approved' ? 'purple' : 'warning'}>
+                            {r.status}
+                          </Badge>
+                        </td>
+                        <td className="p-3 text-right space-x-1.5">
+                          {r.status === 'Submitted' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                PayrollReimbursementService.managerApprove(r.id, currentUser.fullName || currentUser.email);
+                                setDataVersion(v => v + 1);
+                              }}
+                              className="text-[10px] font-bold text-cyan-400 border-cyan-800"
+                            >
+                              Manager Approve
+                            </Button>
+                          )}
+                          {(r.status === 'Submitted' || r.status === 'Manager Approved') && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                PayrollReimbursementService.hrApprove(r.id, r.amount, currentUser.fullName || currentUser.email);
+                                setDataVersion(v => v + 1);
+                              }}
+                              className="text-[10px] font-bold text-emerald-400 border-emerald-800"
+                            >
+                              Final HR Approve
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {/* Report Sub-Tab: Overtime */}
+          {reportsSubTab === 'overtime' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Overtime Records */}
+              <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+                <h3 className="text-sm font-bold text-white">Overtime Hours & Pay</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-950 text-slate-400">
+                      <tr>
+                        <th className="p-2">Employee</th>
+                        <th className="p-2">Date</th>
+                        <th className="p-2">OT Hours</th>
+                        <th className="p-2">OT Pay</th>
+                        <th className="p-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300">
+                      {overtimeRecords.map(o => (
+                        <tr key={o.id}>
+                          <td className="p-2 font-bold text-white">{o.employeeName}</td>
+                          <td className="p-2 text-slate-400">{o.date}</td>
+                          <td className="p-2 font-bold">{o.otHours}h ({o.multiplier}x)</td>
+                          <td className="p-2 text-emerald-400 font-bold">{formatCurrencyINR(o.otAmount)}</td>
+                          <td className="p-2"><Badge variant={o.status === 'Processed' ? 'success' : 'warning'}>{o.status}</Badge></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+
+              {/* Leave Encashments */}
+              <Card className="bg-slate-900 border-slate-800 p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white">Leave Encashments</h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsNewEncashmentOpen(true)}
+                    className="text-xs font-bold"
+                  >
+                    <Plus className="w-3 h-3 mr-1" />
+                    <span>Request Encashment</span>
+                  </Button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-950 text-slate-400">
+                      <tr>
+                        <th className="p-2">Employee</th>
+                        <th className="p-2">Leave Type</th>
+                        <th className="p-2">Days</th>
+                        <th className="p-2">Amount</th>
+                        <th className="p-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800 text-slate-300">
+                      {encashments.map(e => (
+                        <tr key={e.id}>
+                          <td className="p-2 font-bold text-white">{e.employeeName}</td>
+                          <td className="p-2">{e.leaveTypeName}</td>
+                          <td className="p-2 font-bold">{e.encashedDays} Days</td>
+                          <td className="p-2 text-emerald-400 font-bold">{formatCurrencyINR(e.encashmentAmount)}</td>
+                          <td className="p-2"><Badge variant={e.status === 'Processed' ? 'success' : 'warning'}>{e.status}</Badge></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
             </div>
-          </Card>
+          )}
+
+          {/* Report Sub-Tab: Statutory Settings */}
+          {reportsSubTab === 'settings' && (
+            <Card className="max-w-3xl mx-auto bg-slate-900 border-slate-800 p-6 space-y-6 shadow-xl">
+              <div>
+                <h2 className="text-base font-bold text-white">Statutory Rules & Compliance Parameters</h2>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block text-slate-400 mb-1">PF Wage Ceiling (₹)</label>
+                  <input
+                    type="number"
+                    defaultValue={statutoryConfig.pfWageCeiling}
+                    onChange={e => PayrollStatutoryService.updateConfig(tenantId, { pfWageCeiling: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">ESI Gross Wage Ceiling (₹)</label>
+                  <input
+                    type="number"
+                    defaultValue={statutoryConfig.esiGrossWageThreshold}
+                    onChange={e => PayrollStatutoryService.updateConfig(tenantId, { esiGrossWageThreshold: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Standard Deduction (New Regime ₹)</label>
+                  <input
+                    type="number"
+                    defaultValue={statutoryConfig.standardDeductionNew}
+                    onChange={e => PayrollStatutoryService.updateConfig(tenantId, { standardDeductionNew: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Overtime Hourly Multiplier</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    defaultValue={statutoryConfig.overtimeMultiplier}
+                    onChange={e => PayrollStatutoryService.updateConfig(tenantId, { overtimeMultiplier: Number(e.target.value) })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-800/80 text-[11px] text-amber-300 flex items-center gap-2">
+                <Info className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>Statutory rules should be verified by finance and payroll administrators before monthly finalized processing.</span>
+              </div>
+            </Card>
+          )}
         </div>
-      )}
-
-      {/* TAB 9: SETTINGS */}
-      {activeTab === 'settings' && (
-        <Card className="max-w-3xl mx-auto bg-slate-900 border-slate-800 p-6 space-y-6 shadow-xl">
-          <div>
-            <h2 className="text-base font-bold text-white">Statutory Rules & Compliance Parameters</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Centralized configuration for Provident Fund, ESI, TDS, and Overtime multipliers</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 text-xs">
-            <div>
-              <label className="block text-slate-400 mb-1">PF Wage Ceiling (₹)</label>
-              <input
-                type="number"
-                defaultValue={statutoryConfig.pfWageCeiling}
-                onChange={e => PayrollStatutoryService.updateConfig(tenantId, { pfWageCeiling: Number(e.target.value) })}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-400 mb-1">ESI Gross Wage Ceiling (₹)</label>
-              <input
-                type="number"
-                defaultValue={statutoryConfig.esiGrossWageThreshold}
-                onChange={e => PayrollStatutoryService.updateConfig(tenantId, { esiGrossWageThreshold: Number(e.target.value) })}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-400 mb-1">Standard Deduction (New Regime ₹)</label>
-              <input
-                type="number"
-                defaultValue={statutoryConfig.standardDeductionNew}
-                onChange={e => PayrollStatutoryService.updateConfig(tenantId, { standardDeductionNew: Number(e.target.value) })}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-400 mb-1">Overtime Hourly Multiplier</label>
-              <input
-                type="number"
-                step="0.1"
-                defaultValue={statutoryConfig.overtimeMultiplier}
-                onChange={e => PayrollStatutoryService.updateConfig(tenantId, { overtimeMultiplier: Number(e.target.value) })}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-white"
-              />
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-800/80 text-[11px] text-amber-300 flex items-center gap-2">
-            <Info className="w-4 h-4 shrink-0 text-amber-400" />
-            <span>Statutory rules should be verified by finance and payroll administrators before monthly finalized processing.</span>
-          </div>
-        </Card>
-      )}
-
-      {/* TAB 10: PAYROLL CONFIGURATION (Payroll Cycle & Attendance Policy) */}
-      {activeTab === 'config' && (
-        <PayrollConfigurationTab />
       )}
 
       {/* PAYSLIP DETAIL MODAL */}

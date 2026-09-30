@@ -1,60 +1,72 @@
-// MODULE 10: Payroll Configuration Host Component
+// ====================================================================
+// Payroll Configuration Host Module
+// Modular container for all 6 core payroll configuration submodules
+// ====================================================================
+
 import React, { useState } from 'react';
 import {
   Calendar,
   Sliders,
-  Settings,
-  Layers,
-  Sparkles,
-  Info,
+  CalendarDays,
+  Clock,
+  Coins,
+  Scale,
 } from 'lucide-react';
 import { PayrollCycleTab } from './PayrollCycleTab';
 import { AttendancePolicyTab } from './AttendancePolicyTab';
+import { HolidayListTab } from './HolidayListTab';
+import { OtManagementTab } from './OtManagementTab';
+import { SalaryComponentsTab } from './SalaryComponentsTab';
+import { DeductionsPenaltiesTab } from './DeductionsPenaltiesTab';
+
+export type PayrollConfigSubTab =
+  | 'cycle'
+  | 'attendance_policy'
+  | 'holidays'
+  | 'ot'
+  | 'salary_components'
+  | 'deductions';
 
 export const PayrollConfigurationTab: React.FC = () => {
-  // Submodule navigation state: 'cycle' | 'policy'
-  const [activeSubTab, setActiveSubTab] = useState<'cycle' | 'policy'>('cycle');
+  const [activeSubTab, setActiveSubTab] = useState<PayrollConfigSubTab>('cycle');
+
+  const subTabs = [
+    { id: 'cycle' as const, label: 'Payroll Cycle', icon: <Calendar className="w-3.5 h-3.5" /> },
+    { id: 'attendance_policy' as const, label: 'Attendance Policy', icon: <Sliders className="w-3.5 h-3.5" /> },
+    { id: 'holidays' as const, label: 'Holiday List', icon: <CalendarDays className="w-3.5 h-3.5" /> },
+    { id: 'ot' as const, label: 'OT Management', icon: <Clock className="w-3.5 h-3.5" /> },
+    { id: 'salary_components' as const, label: 'Salary Components', icon: <Coins className="w-3.5 h-3.5" /> },
+    { id: 'deductions' as const, label: 'Deductions & Penalties', icon: <Scale className="w-3.5 h-3.5" /> },
+  ];
 
   return (
     <div className="space-y-6">
       {/* Submodule Segmented Navigation Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-100 p-2 rounded-2xl border border-slate-200">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 overflow-x-auto bg-slate-900/90 border border-slate-800 p-1.5 rounded-2xl scrollbar-none">
+        {subTabs.map(tab => (
           <button
-            onClick={() => setActiveSubTab('cycle')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeSubTab === 'cycle'
-                ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
-                : 'text-slate-600 hover:text-slate-900'
+            key={tab.id}
+            onClick={() => setActiveSubTab(tab.id)}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              activeSubTab === tab.id
+                ? 'bg-brand-600 text-white shadow-md shadow-brand-950'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
-            <Calendar className="w-4 h-4 text-brand-600" />
-            <span>Payroll Cycle</span>
+            {tab.icon}
+            <span>{tab.label}</span>
           </button>
-
-          <button
-            onClick={() => setActiveSubTab('policy')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeSubTab === 'policy'
-                ? 'bg-white text-slate-900 shadow-sm border border-slate-200'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Sliders className="w-4 h-4 text-brand-600" />
-            <span>Attendance Policy</span>
-          </button>
-        </div>
-
-        <div className="text-xs text-slate-500 hidden sm:flex items-center gap-2 pr-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-          <span>Dynamic Payroll Calculation Engine Active</span>
-        </div>
+        ))}
       </div>
 
       {/* Submodule Content */}
       <div className="animate-in fade-in duration-200">
         {activeSubTab === 'cycle' && <PayrollCycleTab />}
-        {activeSubTab === 'policy' && <AttendancePolicyTab />}
+        {activeSubTab === 'attendance_policy' && <AttendancePolicyTab />}
+        {activeSubTab === 'holidays' && <HolidayListTab />}
+        {activeSubTab === 'ot' && <OtManagementTab />}
+        {activeSubTab === 'salary_components' && <SalaryComponentsTab />}
+        {activeSubTab === 'deductions' && <DeductionsPenaltiesTab />}
       </div>
     </div>
   );

@@ -7,6 +7,10 @@ import { PayrollCycleService } from '../services/payroll/payrollCycleService';
 import { AttendancePolicyService } from '../services/payroll/attendancePolicyService';
 import { PayrollCalculationService } from '../services/payroll/payrollCalculationService';
 import { EmployeeService } from '../services/employeeService';
+import { HolidayPayrollService } from '../services/payroll/holidayPayrollService';
+import { PayrollOvertimeConfigService } from '../services/payroll/payrollOvertimeConfigService';
+import { SalaryComponentService } from '../services/payroll/salaryComponentService';
+import { DeductionPolicyService } from '../services/payroll/deductionPolicyService';
 import { PayrollCycle, AttendancePolicy, Attendance, Employee } from '../database/schema';
 
 export function runPayrollConfigurationTestSuite(): {
@@ -451,6 +455,200 @@ export function runPayrollConfigurationTestSuite(): {
     );
   } catch (err: any) {
     assert('Multi-Tenant Isolation', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // TEST 8: Holiday List Configuration & Period Retrieval
+  // -------------------------------------------------------------
+  try {
+    const holidays = HolidayPayrollService.getAll({ tenantId });
+    assert(
+      'Initial seed holidays exist in unified storage',
+      holidays.length > 0,
+      `Found ${holidays.length} holidays`
+    );
+
+    // Create a new holiday
+    const newHoliday = HolidayPayrollService.create({
+      organizationId: tenantId,
+      name: 'Diwali Special Holiday',
+      date: '2026-11-08',
+      isOptional: false,
+      description: 'Festival of Lights',
+    });
+
+    assert(
+      'Holiday created successfully in unified storage',
+      !!newHoliday.id && newHoliday.name === 'Diwali Special Holiday',
+      `Holiday ID: ${newHoliday.id}`
+    );
+
+    // Test period range retrieval
+    const novHolidays = HolidayPayrollService.getHolidaysInPeriod(tenantId, '2026-11-01', '2026-11-30');
+    assert(
+      'Holiday within period range is retrieved accurately',
+      novHolidays.some(h => h.date === '2026-11-08'),
+      `November holidays count: ${novHolidays.length}`
+    );
+  } catch (err: any) {
+    assert('Holiday List Configuration & Period Retrieval', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // TEST 9: Overtime Configuration & Calculation Modes
+  // -------------------------------------------------------------
+  try {
+    const otConfig = PayrollOvertimeConfigService.getConfig(tenantId);
+    assert(
+      'Default Overtime Configuration exists',
+      !!otConfig && otConfig.isEnabled === true,
+      `OT Calculation Method: ${otConfig.calculationMethod}`
+    );
+
+    // Test Multiplier calculation (1.5x of Hourly Basic)
+    const multiplierPayRes = PayrollOvertimeConfigService.calculateOvertimePay({
+      otHours: 10,
+      basicSalary: 30000,
+      grossSalary: 60000,
+      workingDaysPerMonth: 30,
+      standardShiftHours: 8,
+      tenantId,
+    });
+    // hourlyRate = 30000 / (30 * 8) = 125
+    // pay = 10 * 125 * 1.5 = 1875
+    assert(
+      'OT Multiplier pay calculation is accurate',
+      multiplierPayRes.otPay === 1875,
+      `Expected 1875, got ${multiplierPayRes.otPay}`
+    );
+
+    // Update config to Fixed Rate per Hour
+    PayrollOvertimeConfigService.updateConfig(tenantId, { calculationMethod: 'FIXED_PER_HOUR', fixedAmountPerHour: 200 });
+    const fixedHrPayRes = PayrollOvertimeConfigService.calculateOvertimePay({
+      otHours: 5,
+      basicSalary: 30000,
+      grossSalary: 60000,
+      tenantId,
+    });
+    assert(
+      'OT Fixed Rate per Hour pay calculation is accurate',
+      fixedHrPayRes.otPay === 1000,
+      `Expected 1000, got ${fixedHrPayRes.otPay}`
+    );
+
+    // Reset OT config back to default enabled with multiplier
+    PayrollOvertimeConfigService.updateConfig(tenantId, { calculationMethod: 'MULTIPLIER', multiplier: 1.5, isEnabled: true });
+  } catch (err: any) {
+    assert('Overtime Configuration & Calculation Modes', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // TEST 10: Salary Components CRUD & Amount Computation
+  // -------------------------------------------------------------
+  try {
+    const components = SalaryComponentService.getAll(tenantId);
+    assert(
+      'Initial seed salary components exist',
+      components.length >= 4,
+      `Found ${components.length} components`
+    );
+
+    // Create a custom allowance component
+    const perfBonus = SalaryComponentService.create({
+      organizationId: tenantId,
+      name: 'Performance Incentive',
+      componentType: 'Incentive',
+      calculationMethod: 'PERCENT_BASIC',
+      value: 10, // 10% of basic
+      isTaxable: true,
+      isPfApplicable: false,
+      isEsiApplicable: true,
+      isRecurring: true,
+      payslipDisplayName: 'Performance Incentive',
+      status: 'Active',
+    });
+
+    assert(
+      'Custom Salary Component created successfully',
+      !!perfBonus.id && perfBonus.name === 'Performance Incentive',
+      `Component: ${perfBonus.name}`
+    );
+
+    const calcAmt = SalaryComponentService.calculateComponentAmount(perfBonus, 30000, 60000);
+    assert(
+      'Component amount calculation (10% of basic ₹30,000) = ₹3,000',
+      calcAmt === 3000,
+      `Expected 3000, got ${calcAmt}`
+    );
+  } catch (err: any) {
+    assert('Salary Components CRUD & Amount Computation', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // TEST 11: Deductions & Penalties Policy CRUD & Amount Calculation
+  // -------------------------------------------------------------
+  try {
+    const deductions = DeductionPolicyService.getAll(tenantId);
+    assert(
+      'Initial seed deduction policies exist',
+      deductions.length >= 3,
+      `Found ${deductions.length} policies`
+    );
+
+    // Create a custom deduction policy
+    const damageDeduction = DeductionPolicyService.create({
+      organizationId: tenantId,
+      name: 'IT Asset Security Deduction',
+      deductionType: 'Damage/Recovery',
+      calculationMethod: 'FIXED',
+      value: 1500,
+      isRecurring: false,
+      isTaxDeductible: false,
+      isAutomatic: false,
+      status: 'Active',
+    });
+
+    assert(
+      'Custom Deduction Policy created successfully',
+      !!damageDeduction.id && damageDeduction.value === 1500,
+      `Created Policy: ${damageDeduction.name}`
+    );
+
+    const dedAmt = DeductionPolicyService.calculateDeductionAmount({
+      policy: damageDeduction,
+      basicSalary: 30000,
+      grossSalary: 60000,
+    });
+    assert(
+      'Deduction fixed amount evaluates to ₹1,500',
+      dedAmt === 1500,
+      `Expected 1500, got ${dedAmt}`
+    );
+  } catch (err: any) {
+    assert('Deductions & Penalties Policy CRUD & Amount Calculation', false, err.message);
+  }
+
+  // -------------------------------------------------------------
+  // TEST 12: Integrated Full Pipeline Calculation
+  // -------------------------------------------------------------
+  try {
+    const employees = EmployeeService.getAll();
+    const emp = employees[0];
+
+    const breakup = PayrollCalculationService.calculateEmployeeMonthlyPay({
+      employee: emp,
+      year: 2026,
+      month: 9,
+      tenantId,
+    });
+
+    assert(
+      'Integrated payroll calculation aggregates custom earnings and deductions',
+      breakup.netSalary > 0 && breakup.earnings.totalGross > breakup.earnings.basicSalary,
+      `Gross: ₹${breakup.earnings.totalGross}, Deductions: ₹${breakup.deductions.totalDeductions}, Net: ₹${breakup.netSalary}`
+    );
+  } catch (err: any) {
+    assert('Integrated Full Pipeline Calculation', false, err.message);
   }
 
   console.log(`=== TEST SUMMARY: ${passed} PASSED, ${failed} FAILED ===`);

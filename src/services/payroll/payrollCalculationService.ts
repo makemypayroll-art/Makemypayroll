@@ -24,6 +24,10 @@ import { PayrollReimbursementService } from './payrollReimbursementService';
 import { PayrollOvertimeService, PayrollEncashmentService } from './payrollOvertimeService';
 import { PayrollCycleService } from './payrollCycleService';
 import { AttendancePolicyService } from './attendancePolicyService';
+import { PayrollOvertimeConfigService } from './payrollOvertimeConfigService';
+import { SalaryComponentService } from './salaryComponentService';
+import { DeductionPolicyService } from './deductionPolicyService';
+import { HolidayPayrollService } from './holidayPayrollService';
 
 export interface EmployeeSalaryBreakup {
   employee: Employee;
@@ -97,7 +101,16 @@ export class PayrollCalculationService {
       : PayrollCycleService.getDefaultCycle(tenantId);
     const periodDates = PayrollCycleService.calculatePeriodDates(cycle, year, month);
 
-    // 2. Attendance & LOP Policy Evaluation
+    // 2. Holidays in Period
+    const holidaysInPeriod = HolidayPayrollService.getHolidaysInPeriod(
+      periodDates.startDate,
+      periodDates.endDate,
+      tenantId,
+      employee.branchId
+    );
+    const holidayCount = Math.max(holidaysInPeriod.length, 1);
+
+    // 3. Attendance & LOP Policy Evaluation
     const empAttendance = AttendanceService.getAll().filter(
       a => a.employeeId === employee.id && a.date >= periodDates.startDate && a.date <= periodDates.endDate
     );
@@ -117,12 +130,12 @@ export class PayrollCalculationService {
     const paidLeaveDays = evalResult.paidLeaveDays;
     const lopDays = evalResult.totalLopDays;
     const weeklyOffDays = evalResult.weeklyOffDays || 4; // Standard 4 Sundays
-    const holidayDays = evalResult.holidayDays || 1;
+    const holidayDays = evalResult.holidayDays || holidayCount;
     let overtimeHours = evalResult.overtimeHours;
 
     const paymentDays = Math.max(0, totalWorkingDays - lopDays);
 
-    // 2. Base Salary Structure
+    // 4. Base Salary Structure & Custom Components
     const salary = employee.salaryStructure || {
       basicSalary: 30000,
       hra: 15000,
@@ -153,7 +166,36 @@ export class PayrollCalculationService {
     const earnedMedical = Math.round(medicalSalary * prorationRatio);
     const earnedOther = Math.round(otherSalary * prorationRatio);
 
-    // 3. Overtime Pay
+    // Dynamic Custom Salary Components
+    let customComponentsPay = 0;
+    let calculatedIncentives = 0;
+    let calculatedBonus = 0;
+    const customComponentsBreakdown: Record<string, number> = {};
+
+    const availableComponents = SalaryComponentService.getAll(tenantId).filter(c => c.status === 'Active');
+    availableComponents.forEach(comp => {
+      // Check if employee has assigned value or global default
+      const assignedVal = salary.customComponents?.[comp.id];
+      if (assignedVal !== undefined || comp.isRecurring) {
+        const compAmt = SalaryComponentService.calculateComponentAmount(
+          comp,
+          earnedBasic,
+          grossSalary,
+          assignedVal
+        );
+        if (compAmt > 0) {
+          customComponentsBreakdown[comp.payslipDisplayName || comp.name] = compAmt;
+          customComponentsPay += compAmt;
+          if (comp.componentType === 'Incentive') {
+            calculatedIncentives += compAmt;
+          } else if (comp.componentType === 'Bonus') {
+            calculatedBonus += compAmt;
+          }
+        }
+      }
+    });
+
+    // 5. Overtime Pay Calculation via OT Management Engine
     let otPay = 0;
     if (params.applyLiveDeductions) {
       const otResult = PayrollOvertimeService.processMonthlyOvertime(employee.id, monthStr, periodId, tenantId);
@@ -162,17 +204,17 @@ export class PayrollCalculationService {
         overtimeHours = otResult.totalOtHours;
       }
     } else {
-      const otCalc = PayrollStatutoryService.calculateOvertime({
+      const otCalc = PayrollOvertimeConfigService.calculateOvertimePay({
+        basicSalary,
+        grossSalary,
         otHours: overtimeHours,
-        basicSalary: salary.basicSalary,
-        grossSalary: salary.grossSalary,
-        totalWorkingDays,
+        workingDaysPerMonth: totalWorkingDays,
         tenantId,
       });
-      otPay = otCalc.otAmount;
+      otPay = otCalc.otPay;
     }
 
-    // 4. Leave Encashment & Reimbursements
+    // 6. Leave Encashment & Reimbursements
     let leaveEncashmentPay = 0;
     let reimbursementsPay = 0;
 
@@ -184,7 +226,7 @@ export class PayrollCalculationService {
       reimbursementsPay = reimbRes.totalReimbursements;
     }
 
-    // 5. Total Gross Earnings
+    // 7. Total Gross Earnings
     const totalGross = Math.max(
       0,
       earnedBasic +
@@ -193,12 +235,13 @@ export class PayrollCalculationService {
         earnedSpecial +
         earnedMedical +
         earnedOther +
+        customComponentsPay +
         otPay +
         leaveEncashmentPay +
         reimbursementsPay
     );
 
-    // 6. Statutory PF & ESI Deductions
+    // 8. Statutory PF & ESI Deductions
     const pfRes = PayrollStatutoryService.calculatePF({
       basicWage: earnedBasic,
       tenantId,
@@ -209,10 +252,10 @@ export class PayrollCalculationService {
       tenantId,
     });
 
-    // 7. Professional Tax (PT)
+    // 9. Professional Tax (PT)
     const professionalTax = this.calculateProfessionalTax(totalGross);
 
-    // 8. Tax Deduction at Source (TDS)
+    // 10. Tax Deduction at Source (TDS)
     const projectedAnnualGross = totalGross * 12;
     const tdsRes = PayrollStatutoryService.calculateTDS({
       annualGross: projectedAnnualGross,
@@ -221,7 +264,7 @@ export class PayrollCalculationService {
     });
     const tds = tdsRes.monthlyTDS;
 
-    // 9. Loans & Advances Recovery
+    // 11. Loans & Advances Recovery
     let loanEmi = 0;
     let advanceRecovery = 0;
 
@@ -235,17 +278,50 @@ export class PayrollCalculationService {
 
     const loanAdvanceDeduction = loanEmi + advanceRecovery;
 
-    // 10. Total Deductions
+    // 12. Dynamic Deductions & Penalties (Late Coming & Custom Penalties)
+    let dynamicCustomDeductions = 0;
+    const customDeductionsBreakdown: Record<string, number> = {};
+
+    // Late penalty from attendance policy
+    if (evalResult.latePenaltyLopDays > 0) {
+      const latePenaltyAmt = Math.round(evalResult.latePenaltyLopDays * perDayGross);
+      if (latePenaltyAmt > 0) {
+        customDeductionsBreakdown['Late Coming Penalty'] = latePenaltyAmt;
+        dynamicCustomDeductions += latePenaltyAmt;
+      }
+    }
+
+    // Custom assigned deduction policies
+    const availableDeductions = DeductionPolicyService.getAll(tenantId).filter(d => d.status === 'Active');
+    availableDeductions.forEach(ded => {
+      const assignedVal = salary.customDeductions?.[ded.id];
+      if (assignedVal !== undefined) {
+        const dedAmt = DeductionPolicyService.calculateDeductionAmount({
+          policy: ded,
+          basicSalary: earnedBasic,
+          grossSalary,
+          dailyGrossRate: perDayGross,
+          overrideValue: assignedVal,
+        });
+        if (dedAmt > 0) {
+          customDeductionsBreakdown[ded.name] = dedAmt;
+          dynamicCustomDeductions += dedAmt;
+        }
+      }
+    });
+
+    // 13. Total Deductions
     const totalDeductions = Math.max(
       0,
       pfRes.totalEmployeePF +
         esiRes.employeeESI +
         professionalTax +
         tds +
-        loanAdvanceDeduction
+        loanAdvanceDeduction +
+        dynamicCustomDeductions
     );
 
-    // 11. Net Payable Salary
+    // 14. Net Payable Salary
     const netSalary = Math.max(0, totalGross - totalDeductions);
     const netSalaryInWords = this.numberToWordsINR(netSalary);
 
@@ -256,11 +332,12 @@ export class PayrollCalculationService {
       specialAllowance: earnedSpecial,
       medicalAllowance: earnedMedical,
       overtimePay: otPay,
-      incentives: 0,
-      bonus: 0,
+      incentives: calculatedIncentives,
+      bonus: calculatedBonus,
       leaveEncashment: leaveEncashmentPay,
       reimbursements: reimbursementsPay,
       otherAllowances: earnedOther,
+      customComponents: customComponentsBreakdown,
       totalGross,
     };
 
@@ -273,7 +350,8 @@ export class PayrollCalculationService {
       loanAdvanceDeduction,
       loanEmi,
       advanceRecovery,
-      otherDeductions: 0,
+      otherDeductions: dynamicCustomDeductions,
+      customDeductions: customDeductionsBreakdown,
       totalDeductions,
     };
 

@@ -286,6 +286,8 @@ export interface SalaryStructure {
   otherAllowances: number;
   grossSalary: number;
   ctc: number;
+  customComponents?: Record<string, number>;
+  customDeductions?: Record<string, number>;
 }
 
 export interface BankDetails {
@@ -774,6 +776,73 @@ export interface AttendancePolicy {
   updatedAt: string;
 }
 
+export interface OvertimeConfig {
+  id: string; // e.g. "ot-config-001"
+  organizationId: string;
+  isEnabled: boolean;
+  calculationMethod: 'MULTIPLIER' | 'FIXED_PER_HOUR' | 'FIXED_PER_DAY';
+  multiplier: number; // e.g. 1.5, 2.0, 2.5
+  fixedAmountPerHour: number; // e.g. 200
+  fixedAmountPerDay: number; // e.g. 1500
+  minOtHoursDaily: number; // e.g. 0.5
+  otRoundingMinutes: number; // e.g. 15 or 30
+  detectionMode: 'after_shift' | 'before_shift' | 'both';
+  requireApproval: boolean;
+  maxDailyOtHours: number; // e.g. 4
+  maxMonthlyOtHours: number; // e.g. 40
+  updatedAt: string;
+}
+
+export type SalaryComponentType = 'Earning' | 'Allowance' | 'Incentive' | 'Bonus' | 'Other Earning';
+export type SalaryCalculationMethod = 'FIXED' | 'PERCENT_BASIC' | 'PERCENT_GROSS';
+
+export interface SalaryComponent {
+  id: string; // e.g. "comp-001"
+  organizationId: string;
+  name: string; // e.g. "Performance Incentive", "Travel Allowance"
+  componentType: SalaryComponentType;
+  calculationMethod: SalaryCalculationMethod;
+  value: number; // Amount or percentage
+  isRecurring: boolean;
+  isTaxable: boolean;
+  isPfApplicable: boolean;
+  isEsiApplicable: boolean;
+  payslipDisplayName: string;
+  status: 'Active' | 'Inactive';
+  description?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type DeductionType =
+  | 'Late Coming Penalty'
+  | 'Attendance Penalty'
+  | 'Loan Deduction'
+  | 'Advance Recovery'
+  | 'Unpaid Leave Deduction'
+  | 'Damage/Recovery'
+  | 'Other Deduction';
+
+export type DeductionCalculationMethod = 'FIXED' | 'PERCENT_BASIC' | 'PERCENT_GROSS' | 'DAYS_LOP';
+
+export interface DeductionPolicy {
+  id: string; // e.g. "ded-001"
+  organizationId: string;
+  name: string; // e.g. "Late Coming Penalty", "Damage/Recovery"
+  deductionType: DeductionType;
+  calculationMethod: DeductionCalculationMethod;
+  value: number; // Fixed amount, percentage, or days ratio
+  isRecurring: boolean;
+  isTaxDeductible: boolean;
+  isAutomatic: boolean;
+  status: 'Active' | 'Inactive';
+  description?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // -------------------------------------------------------------
 // PAYROLL MANAGEMENT
 // -------------------------------------------------------------
@@ -805,6 +874,7 @@ export interface PayslipEarnings {
   leaveEncashment?: number;
   reimbursements?: number;
   otherAllowances: number;
+  customComponents?: Record<string, number>;
   totalGross: number;
 }
 
@@ -818,6 +888,7 @@ export interface PayslipDeductions {
   loanEmi?: number;
   advanceRecovery?: number;
   otherDeductions: number;
+  customDeductions?: Record<string, number>;
   totalDeductions: number;
 }
 

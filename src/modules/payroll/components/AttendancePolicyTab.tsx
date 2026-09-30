@@ -1,25 +1,19 @@
-// MODULE 10 SUBMODULE 2: Attendance Policy Configuration
+// ====================================================================
+// Payroll Configuration Submodule: Attendance Policy (Rules & Penalties)
+// ====================================================================
+
 import React, { useState } from 'react';
 import {
   Sliders,
   Plus,
   Edit2,
   Trash2,
-  CheckCircle,
-  XCircle,
-  Users,
   Clock,
-  ShieldCheck,
-  Percent,
-  Check,
-  X,
-  AlertCircle,
-  Info,
-  ChevronRight,
-  TrendingUp,
+  AlertTriangle,
+  Users,
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
-import { AttendancePolicy } from '../../../database/schema';
+import { AttendancePolicy, Employee } from '../../../database/schema';
 import { AttendancePolicyService } from '../../../services/payroll/attendancePolicyService';
 import { EmployeeService } from '../../../services/employeeService';
 import { Card } from '../../../components/common/Card';
@@ -104,10 +98,10 @@ export const AttendancePolicyTab: React.FC = () => {
   const handleOpenEditModal = (policy: AttendancePolicy) => {
     setEditingPolicy(policy);
     setFormData({
-      organizationId: policy.organizationId,
+      organizationId: policy.organizationId || tenantId,
       name: policy.name,
       description: policy.description || '',
-      isDefault: !!policy.isDefault,
+      isDefault: policy.isDefault || false,
       status: policy.status,
       fullDayHours: policy.fullDayHours,
       halfDayHours: policy.halfDayHours,
@@ -136,37 +130,36 @@ export const AttendancePolicyTab: React.FC = () => {
     e.preventDefault();
 
     if (!formData.name.trim()) {
-      alert('Policy Name is required.');
+      alert('Attendance Policy Name is required.');
       return;
     }
 
-    if (formData.fullDayHours <= 0 || formData.halfDayHours <= 0) {
-      alert('Working hours must be positive numbers.');
-      return;
+    try {
+      if (editingPolicy) {
+        AttendancePolicyService.update(
+          editingPolicy.id,
+          formData,
+          currentUser.fullName
+        );
+      } else {
+        AttendancePolicyService.create(
+          formData,
+          currentUser.fullName
+        );
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to save Attendance Policy.');
     }
-
-    if (formData.halfDayHours >= formData.fullDayHours) {
-      alert('Half Day Hours must be less than Full Day Hours.');
-      return;
-    }
-
-    if (editingPolicy) {
-      AttendancePolicyService.update(editingPolicy.id, formData, currentUser.fullName);
-      alert('Attendance Policy updated successfully!');
-    } else {
-      AttendancePolicyService.create(formData, currentUser.fullName);
-      alert('New Attendance Policy created successfully!');
-    }
-
-    setIsModalOpen(false);
   };
 
   const handleToggleStatus = (policy: AttendancePolicy) => {
-    AttendancePolicyService.toggleStatus(policy.id, currentUser.fullName);
+    const nextStatus = policy.status === 'Active' ? 'Inactive' : 'Active';
+    AttendancePolicyService.update(policy.id, { status: nextStatus }, currentUser.fullName);
   };
 
   const handleDeletePolicy = (policy: AttendancePolicy) => {
-    if (!confirm(`Are you sure you want to delete "${policy.name}"?`)) return;
+    if (!confirm(`Are you sure you want to delete policy "${policy.name}"?`)) return;
     const res = AttendancePolicyService.delete(policy.id, currentUser.fullName);
     if (!res.success) {
       alert(res.message);
@@ -178,66 +171,55 @@ export const AttendancePolicyTab: React.FC = () => {
   const policyColumns: Column<AttendancePolicy>[] = [
     {
       key: 'name',
-      header: 'Policy Name & Classification',
+      header: 'Policy Name',
       render: (p) => (
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-extrabold text-sm text-slate-900">{p.name}</span>
+            <span className="font-extrabold text-sm text-slate-100">{p.name}</span>
             {p.isDefault && (
               <Badge variant="info" className="text-[10px] bg-brand-900 text-white font-bold">
                 Company Default
               </Badge>
             )}
           </div>
-          {p.description && <div className="text-xs text-slate-500 mt-0.5">{p.description}</div>}
         </div>
       ),
     },
     {
       key: 'hours',
-      header: 'Full / Half Day Hours',
+      header: 'Full / Half Day',
       render: (p) => (
-        <div className="font-mono text-xs">
-          <span className="font-extrabold text-slate-900">{p.fullDayHours}h</span>
-          <span className="text-slate-400"> Full / </span>
-          <span className="font-bold text-slate-700">{p.halfDayHours}h</span>
-          <span className="text-slate-400"> Half</span>
-          <div className="text-[10px] text-slate-500 font-sans mt-0.5">
-            ±{p.fullDayCreditToleranceMinutes}m tolerance
-          </div>
+        <div className="font-mono text-xs text-slate-300">
+          <span className="font-bold text-white">{p.fullDayHours}h</span> Full • <span className="font-bold text-white">{p.halfDayHours}h</span> Half
         </div>
       ),
     },
     {
-      key: 'overtime',
-      header: 'Overtime Policy',
-      render: (p) => (
-        <div>
-          {p.enableOvertime ? (
-            <span className="inline-flex items-center gap-1 font-bold text-xs text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-              {p.overtimePayScale}x Pay Scale
-            </span>
-          ) : (
-            <span className="text-xs text-slate-500 font-semibold">Disabled</span>
-          )}
-          <div className="text-[10px] text-slate-400 mt-0.5">
-            {p.enableOvertime ? `Min ${p.minimumOtHoursDaily}h/day • ${p.otDetectionMode.replace('_', ' ')}` : 'No OT accrual'}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'latePolicy',
-      header: 'Late Coming Policy',
+      key: 'late',
+      header: 'Grace & Penalty Rule',
       render: (p) => (
         <div className="text-xs space-y-0.5">
-          <div className="font-bold text-slate-800">
-            {p.lateComingGraceMinutes}m Grace • Max {p.maxMonthlyLatenessAllowed}/month
+          <div className="font-bold text-amber-400 font-mono">
+            {p.lateComingGraceMinutes}m Grace (Max {p.maxMonthlyLatenessAllowed}/mo)
           </div>
-          <div className="text-[11px] text-amber-700">
-            Penalty: {p.latePenaltyType} ({p.latePenaltyType === 'HalfDay' ? '0.5 Day LOP' : p.latePenaltyType === 'Deduction' ? `₹${p.latePenaltyValue}` : 'Warning only'})
+          <div className="text-[11px] text-slate-400">
+            {p.latePenaltyType === 'None' ? 'No penalty' : p.latePenaltyType === 'HalfDay' ? '0.5 Day LOP' : p.latePenaltyType === 'Deduction' ? `₹${p.latePenaltyValue} deduction` : 'Warning'}
           </div>
+        </div>
+      ),
+    },
+    {
+      key: 'ot',
+      header: 'Overtime Rule',
+      render: (p) => (
+        <div className="text-xs">
+          {p.enableOvertime ? (
+            <Badge variant="info" className="text-[10px] font-bold">
+              {p.overtimePayScale}x Multiplier
+            </Badge>
+          ) : (
+            <span className="text-slate-500 font-mono">Disabled</span>
+          )}
         </div>
       ),
     },
@@ -249,8 +231,8 @@ export const AttendancePolicyTab: React.FC = () => {
         return (
           <div className="flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-slate-400" />
-            <span className="font-extrabold text-xs text-slate-800 font-mono">{count}</span>
-            <span className="text-xs text-slate-500">assigned</span>
+            <span className="font-extrabold text-xs text-slate-200 font-mono">{count}</span>
+            <span className="text-xs text-slate-400">workforce</span>
           </div>
         );
       },
@@ -259,7 +241,7 @@ export const AttendancePolicyTab: React.FC = () => {
       key: 'status',
       header: 'Status',
       render: (p) => (
-        <Badge variant={p.status === 'Active' ? 'success' : 'default'}>
+        <Badge variant={p.status === 'Active' ? 'success' : 'default'} className="text-[10px]">
           {p.status}
         </Badge>
       ),
@@ -274,37 +256,34 @@ export const AttendancePolicyTab: React.FC = () => {
             <>
               <Button
                 size="sm"
-                variant="ghost"
-                className="p-1.5"
-                onClick={() => handleOpenEditModal(p)}
-                title="Edit Attendance Policy"
+                variant="outline"
+                onClick={() => handleToggleStatus(p)}
+                className={`h-8 px-2.5 text-xs font-bold ${
+                  p.status === 'Active'
+                    ? 'border-amber-900/40 text-amber-400 hover:bg-amber-950/40'
+                    : 'border-emerald-900/40 text-emerald-400 hover:bg-emerald-950/40'
+                }`}
               >
-                <Edit2 className="w-4 h-4 text-slate-600 hover:text-brand-800" />
+                {p.status === 'Active' ? 'Deactivate' : 'Activate'}
               </Button>
-
               <Button
                 size="sm"
-                variant="ghost"
-                className="p-1.5"
-                onClick={() => handleToggleStatus(p)}
-                title={p.status === 'Active' ? 'Deactivate Policy' : 'Activate Policy'}
+                variant="outline"
+                onClick={() => handleOpenEditModal(p)}
+                className="h-8 px-2.5 text-xs font-bold border-slate-700 hover:bg-slate-800 text-slate-200"
               >
-                {p.status === 'Active' ? (
-                  <XCircle className="w-4 h-4 text-amber-600 hover:text-amber-800" />
-                ) : (
-                  <CheckCircle className="w-4 h-4 text-emerald-600 hover:text-emerald-800" />
-                )}
+                <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                Edit
               </Button>
-
               {!p.isDefault && (
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="p-1.5"
+                  variant="outline"
                   onClick={() => handleDeletePolicy(p)}
-                  title="Delete Policy"
+                  className="h-8 px-2.5 text-xs font-bold border-rose-900/50 hover:bg-rose-950/50 text-rose-300"
                 >
-                  <Trash2 className="w-4 h-4 text-rose-600 hover:text-rose-800" />
+                  <Trash2 className="w-3.5 h-3.5 mr-1 text-rose-400" />
+                  Delete
                 </Button>
               )}
             </>
@@ -315,17 +294,19 @@ export const AttendancePolicyTab: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header & Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <Sliders className="w-5 h-5 text-brand-600" />
-            Attendance Policy Configuration
-          </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Configure working hour thresholds, overtime detection multipliers, and late-coming penalty rules for payroll integration.
-          </p>
+    <div className="space-y-4">
+      {/* Header Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 p-4 rounded-2xl">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-brand-950 border border-brand-800 flex items-center justify-center text-brand-400 shadow-inner">
+            <Sliders className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-extrabold text-white">Attendance Policy</h2>
+            <div className="text-xs text-slate-400 font-mono">
+              {policies.length} active policy rules
+            </div>
+          </div>
         </div>
 
         {(isSuperAdmin || isHR) && (
@@ -333,269 +314,255 @@ export const AttendancePolicyTab: React.FC = () => {
             size="sm"
             variant="primary"
             onClick={handleOpenAddModal}
-            leftIcon={<Plus className="w-4 h-4" />}
-            className="bg-brand-600 hover:bg-brand-500 font-bold shadow-sm"
+            className="text-xs font-bold bg-brand-600 hover:bg-brand-500 text-white shadow-md shadow-brand-950"
           >
-            Add Attendance Policy
+            <Plus className="w-3.5 h-3.5 mr-1" />
+            <span>Add Attendance Policy</span>
           </Button>
         )}
       </div>
 
       {/* Policy Table */}
-      <Table
-        columns={policyColumns}
-        data={policies}
-        keyExtractor={p => p.id}
-        pageSize={10}
-        emptyMessage="No attendance policies configured."
-      />
+      <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden">
+        <Table
+          columns={policyColumns}
+          data={policies}
+          keyExtractor={p => p.id}
+          pageSize={10}
+          emptyMessage="No attendance policies configured."
+        />
+      </Card>
 
-      {/* Add / Edit Policy Modal */}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={editingPolicy ? `Edit Attendance Policy: ${editingPolicy.name}` : 'Create New Attendance Policy'}
-        subtitle="Configure working hours, overtime, punctuality grace, and penalties"
-        size="xl"
-      >
-        <form onSubmit={handleSavePolicy} className="space-y-6 max-h-[75vh] overflow-y-auto px-1 pr-2">
-          {/* Section 1: Basic Information */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-black text-brand-900 uppercase tracking-wider border-b pb-1">
-              1. Policy Identity & General Settings
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Attendance Policy Name *"
-                placeholder="e.g. Factory Staff Policy, Standard Corporate Policy"
-                value={formData.name}
-                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                required
-              />
+      {/* 4-Section Add / Edit Modal */}
+      {isModalOpen && (
+        <Modal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          title={editingPolicy ? `Edit Policy: ${editingPolicy.name}` : 'Create Attendance Policy'}
+          size="lg"
+        >
+          <form onSubmit={handleSavePolicy} className="space-y-5 text-xs max-h-[75vh] overflow-y-auto pr-1">
+            {/* Section 1: Basic Information */}
+            <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-1.5">
+                <span>1. Basic Information</span>
+              </h4>
 
               <div className="grid grid-cols-2 gap-3">
+                <Input
+                  label="Policy Name *"
+                  placeholder="e.g. Standard Corporate Policy"
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  required
+                />
+
                 <Select
-                  label="Policy Status"
+                  label="Status"
                   value={formData.status}
                   onChange={e => setFormData({ ...formData, status: e.target.value as any })}
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </Select>
+              </div>
 
-                <div className="flex items-center gap-2 pt-6">
-                  <input
-                    type="checkbox"
-                    id="isDefaultPolicy"
-                    checked={formData.isDefault}
-                    onChange={e => setFormData({ ...formData, isDefault: e.target.checked })}
-                    className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
-                  />
-                  <label htmlFor="isDefaultPolicy" className="text-xs font-bold text-slate-700 cursor-pointer">
-                    Company Default
-                  </label>
-                </div>
+              <div className="grid grid-cols-3 gap-3">
+                <Input
+                  label="Full Day Hours *"
+                  type="number"
+                  step="0.5"
+                  min={4}
+                  max={12}
+                  value={formData.fullDayHours}
+                  onChange={e => setFormData({ ...formData, fullDayHours: Number(e.target.value) })}
+                  required
+                />
+
+                <Input
+                  label="Half Day Hours *"
+                  type="number"
+                  step="0.5"
+                  min={2}
+                  max={8}
+                  value={formData.halfDayHours}
+                  onChange={e => setFormData({ ...formData, halfDayHours: Number(e.target.value) })}
+                  required
+                />
+
+                <Input
+                  label="Credit Tolerance (Mins)"
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={formData.fullDayCreditToleranceMinutes}
+                  onChange={e => setFormData({ ...formData, fullDayCreditToleranceMinutes: Number(e.target.value) })}
+                />
               </div>
             </div>
 
-            <Input
-              label="Policy Description"
-              placeholder="e.g. Applied to plant and factory staff with 9-hour working days and strict punctuality rules"
-              value={formData.description}
-              onChange={e => setFormData({ ...formData, description: e.target.value })}
-            />
-          </div>
+            {/* Section 2: Late Coming Configuration */}
+            <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-1.5">
+                <span>2. Late Coming & Penalty Configuration</span>
+              </h4>
 
-          {/* Section 2: Basic Attendance Settings */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-black text-brand-900 uppercase tracking-wider border-b pb-1">
-              2. Working Hours & Day Thresholds
-            </h4>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <Input
-                label="Full Day Hours *"
-                type="number"
-                step="0.5"
-                value={formData.fullDayHours}
-                onChange={e => setFormData({ ...formData, fullDayHours: Number(e.target.value) })}
-                required
-              />
-              <Input
-                label="Half Day Hours *"
-                type="number"
-                step="0.5"
-                value={formData.halfDayHours}
-                onChange={e => setFormData({ ...formData, halfDayHours: Number(e.target.value) })}
-                required
-              />
-              <Input
-                label="Full Day Credit Tolerance (Minutes)"
-                type="number"
-                value={formData.fullDayCreditToleranceMinutes}
-                onChange={e => setFormData({ ...formData, fullDayCreditToleranceMinutes: Number(e.target.value) })}
-                required
-              />
+              <div className="grid grid-cols-3 gap-3">
+                <Input
+                  label="Grace Period (Mins)"
+                  type="number"
+                  min={0}
+                  max={60}
+                  value={formData.lateComingGraceMinutes}
+                  onChange={e => setFormData({ ...formData, lateComingGraceMinutes: Number(e.target.value), dailyLateAllowanceMinutes: Number(e.target.value) })}
+                />
+
+                <Input
+                  label="Max Allowed / Month"
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={formData.maxMonthlyLatenessAllowed}
+                  onChange={e => setFormData({ ...formData, maxMonthlyLatenessAllowed: Number(e.target.value) })}
+                />
+
+                <Select
+                  label="Penalty Action"
+                  value={formData.latePenaltyType}
+                  onChange={e => setFormData({ ...formData, latePenaltyType: e.target.value as any })}
+                >
+                  <option value="None">None (Warning Only)</option>
+                  <option value="HalfDay">0.5 Day LOP Penalty</option>
+                  <option value="Deduction">Fixed Rupee Deduction</option>
+                  <option value="Warning">Official Warning</option>
+                </Select>
+              </div>
+
+              {formData.latePenaltyType === 'Deduction' && (
+                <Input
+                  label="Fixed Rupee Deduction Amount (₹)"
+                  type="number"
+                  min={10}
+                  value={formData.latePenaltyValue}
+                  onChange={e => setFormData({ ...formData, latePenaltyValue: Number(e.target.value) })}
+                />
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Select
-                label="Full-Day Credit Logic"
-                value={formData.fullDayCreditLogic}
-                onChange={e => setFormData({ ...formData, fullDayCreditLogic: e.target.value as any })}
-              >
-                <option value="inside_shift_only">Inside Shift Hours Only (Strict)</option>
-                <option value="can_stay_late">Can Stay Late to Complete Daily Hours</option>
-              </Select>
 
-              <Input
-                label="Maximum Leave Carryover (Days)"
-                type="number"
-                value={formData.maxLeaveCarryoverDays}
-                onChange={e => setFormData({ ...formData, maxLeaveCarryoverDays: Number(e.target.value) })}
-                required
-              />
-            </div>
-          </div>
+            {/* Section 3: Overtime Controls & Detection */}
+            <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-1.5">
+                <span>3. Overtime (OT) Controls & Auto-Detection</span>
+              </h4>
 
-          {/* Section 3: Overtime Controls & Detection */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-black text-brand-900 uppercase tracking-wider border-b pb-1">
-              3. Overtime (OT) Controls & Auto-Detection
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="flex items-center gap-2 pt-6">
+              <div className="flex items-center gap-2 p-2 rounded bg-slate-900 border border-slate-800">
                 <input
                   type="checkbox"
                   id="enableOvertime"
                   checked={formData.enableOvertime}
                   onChange={e => setFormData({ ...formData, enableOvertime: e.target.checked })}
-                  className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
+                  className="w-4 h-4 rounded text-brand-600"
                 />
-                <label htmlFor="enableOvertime" className="text-xs font-bold text-slate-800 cursor-pointer">
+                <label htmlFor="enableOvertime" className="text-xs font-bold text-slate-200 cursor-pointer">
                   Enable Overtime Calculation
                 </label>
               </div>
 
-              <Select
-                label="Overtime Pay Scale"
-                value={formData.overtimePayScale}
-                onChange={e => setFormData({ ...formData, overtimePayScale: Number(e.target.value) })}
-                disabled={!formData.enableOvertime}
-              >
-                <option value={1.0}>1.0x (Standard Hourly Rate)</option>
-                <option value={1.25}>1.25x (125% Hourly Pay)</option>
-                <option value={1.5}>1.5x (Time-and-a-Half)</option>
-                <option value={2.0}>2.0x (Double Hourly Pay)</option>
-                <option value={2.5}>2.5x (Triple Pay)</option>
-              </Select>
+              <div className="grid grid-cols-3 gap-3">
+                <Select
+                  label="Overtime Pay Scale"
+                  value={formData.overtimePayScale}
+                  onChange={e => setFormData({ ...formData, overtimePayScale: Number(e.target.value) })}
+                  disabled={!formData.enableOvertime}
+                >
+                  <option value={1.0}>1.0x (Standard Single Hourly Rate)</option>
+                  <option value={1.5}>1.5x (Time and a Half)</option>
+                  <option value={2.0}>2.0x (Double Hourly Rate)</option>
+                </Select>
 
-              <Input
-                label="Minimum OT Hours Daily"
-                type="number"
-                step="0.5"
-                value={formData.minimumOtHoursDaily}
-                onChange={e => setFormData({ ...formData, minimumOtHoursDaily: Number(e.target.value) })}
-                disabled={!formData.enableOvertime}
-              />
+                <Input
+                  label="Min Daily OT Hours"
+                  type="number"
+                  step="0.5"
+                  min={0.5}
+                  value={formData.minimumOtHoursDaily}
+                  onChange={e => setFormData({ ...formData, minimumOtHoursDaily: Number(e.target.value) })}
+                  disabled={!formData.enableOvertime}
+                />
+
+                <Select
+                  label="OT Detection Mode"
+                  value={formData.otDetectionMode}
+                  onChange={e => setFormData({ ...formData, otDetectionMode: e.target.value as any })}
+                  disabled={!formData.enableOvertime}
+                >
+                  <option value="after_shift">After Shift End Only</option>
+                  <option value="before_shift">Before Shift Start Only</option>
+                  <option value="both">Both (Pre & Post Shift)</option>
+                </Select>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Select
-                label="OT Detection Mode"
-                value={formData.otDetectionMode}
-                onChange={e => setFormData({ ...formData, otDetectionMode: e.target.value as any })}
-                disabled={!formData.enableOvertime}
-              >
-                <option value="after_shift">After Shift Only</option>
-                <option value="before_shift">Before Shift Only</option>
-                <option value="both">Both (Before & After Shift)</option>
-              </Select>
+            {/* Section 4: Full-Day Calculation Logic */}
+            <div className="space-y-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <h4 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-1.5">
+                <span>4. Shift Full-Day Credit Rules</span>
+              </h4>
 
-              <Input
-                label="OT Detection Window (Minutes)"
-                type="number"
-                value={formData.otWindowMinutes}
-                onChange={e => setFormData({ ...formData, otWindowMinutes: Number(e.target.value) })}
-                disabled={!formData.enableOvertime}
-              />
+              <div className="grid grid-cols-2 gap-3">
+                <Select
+                  label="Credit Logic"
+                  value={formData.fullDayCreditLogic}
+                  onChange={e => setFormData({ ...formData, fullDayCreditLogic: e.target.value as any })}
+                >
+                  <option value="inside_shift_only">Inside Shift Hours Only (Strict)</option>
+                  <option value="can_stay_late">Can Stay Late to Complete Full Hours</option>
+                </Select>
 
-              <div className="flex items-center gap-2 pt-6">
-                <input
-                  type="checkbox"
-                  id="countOutsideShiftHours"
-                  checked={formData.countOutsideShiftHours}
-                  onChange={e => setFormData({ ...formData, countOutsideShiftHours: e.target.checked })}
-                  className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500"
+                <Input
+                  label="Max Annual Leave Carryover"
+                  type="number"
+                  min={0}
+                  max={30}
+                  value={formData.maxLeaveCarryoverDays}
+                  onChange={e => setFormData({ ...formData, maxLeaveCarryoverDays: Number(e.target.value) })}
                 />
-                <label htmlFor="countOutsideShiftHours" className="text-xs font-bold text-slate-800 cursor-pointer">
-                  Count Outside-Shift Hours
+              </div>
+
+              <div className="flex items-center gap-4 pt-2">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={formData.countOutsideShiftHours}
+                    onChange={e => setFormData({ ...formData, countOutsideShiftHours: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-brand-600"
+                  />
+                  <span>Count hours outside assigned shift</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={formData.isDefault}
+                    onChange={e => setFormData({ ...formData, isDefault: e.target.checked })}
+                    className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-brand-600"
+                  />
+                  <span>Set as Company Default Policy</span>
                 </label>
               </div>
             </div>
-          </div>
 
-          {/* Section 4: Late Coming & Punctuality Policy */}
-          <div className="space-y-3">
-            <h4 className="text-xs font-black text-brand-900 uppercase tracking-wider border-b pb-1">
-              4. Late Coming Policy & Penalty Rules
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Input
-                label="Daily Grace Allowance (Minutes)"
-                type="number"
-                value={formData.dailyLateAllowanceMinutes}
-                onChange={e => setFormData({ ...formData, dailyLateAllowanceMinutes: Number(e.target.value) })}
-                required
-              />
-              <Input
-                label="Late Coming Grace Minutes"
-                type="number"
-                value={formData.lateComingGraceMinutes}
-                onChange={e => setFormData({ ...formData, lateComingGraceMinutes: Number(e.target.value) })}
-                required
-              />
-              <Input
-                label="Max Monthly Lateness Allowed"
-                type="number"
-                value={formData.maxMonthlyLatenessAllowed}
-                onChange={e => setFormData({ ...formData, maxMonthlyLatenessAllowed: Number(e.target.value) })}
-                required
-              />
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" size="sm" className="bg-brand-600 text-white font-bold">
+                {editingPolicy ? 'Save Changes' : 'Create Policy'}
+              </Button>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Select
-                label="Late Penalty Type"
-                value={formData.latePenaltyType}
-                onChange={e => setFormData({ ...formData, latePenaltyType: e.target.value as any })}
-              >
-                <option value="HalfDay">Half-Day Salary Deduction (0.5 LOP)</option>
-                <option value="Deduction">Fixed Amount Deduction (₹)</option>
-                <option value="Warning">Warning Only (No Salary Deduction)</option>
-                <option value="None">No Penalty</option>
-              </Select>
-
-              {formData.latePenaltyType === 'Deduction' && (
-                <Input
-                  label="Deduction Amount per Excess Late (₹)"
-                  type="number"
-                  value={formData.latePenaltyValue}
-                  onChange={e => setFormData({ ...formData, latePenaltyValue: Number(e.target.value) })}
-                  required
-                />
-              )}
-            </div>
-          </div>
-
-          <div className="pt-4 flex justify-end gap-2 border-t border-slate-100">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" variant="primary">
-              {editingPolicy ? 'Update Policy' : 'Create Policy'}
-            </Button>
-          </div>
-        </form>
-      </Modal>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };

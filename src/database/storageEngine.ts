@@ -26,9 +26,23 @@ import {
   INITIAL_TENANT_PAYMENTS,
   INITIAL_PAYROLL_CYCLES,
   INITIAL_ATTENDANCE_POLICIES,
+  INITIAL_OVERTIME_CONFIGS,
+  INITIAL_SALARY_COMPONENTS,
+  INITIAL_DEDUCTION_POLICIES,
   generateSeedAttendance,
 } from './seedData';
-import { Tenant, TenantSubscription, TenantLicenseChange, TenantPayment, AdminImpersonationSession, PayrollCycle, AttendancePolicy } from './schema';
+import {
+  Tenant,
+  TenantSubscription,
+  TenantLicenseChange,
+  TenantPayment,
+  AdminImpersonationSession,
+  PayrollCycle,
+  AttendancePolicy,
+  OvertimeConfig,
+  SalaryComponent,
+  DeductionPolicy,
+} from './schema';
 
 const STORAGE_PREFIX = 'novapulse_hrms_v1_';
 
@@ -65,6 +79,9 @@ export const STORAGE_KEYS = {
   GEO_FENCE_EVENTS: `${STORAGE_PREFIX}geo_fence_events`,
   PAYROLL_CYCLES: `${STORAGE_PREFIX}payroll_cycles`,
   ATTENDANCE_POLICIES: `${STORAGE_PREFIX}attendance_policies`,
+  OVERTIME_CONFIG: `${STORAGE_PREFIX}overtime_config`,
+  SALARY_COMPONENTS: `${STORAGE_PREFIX}salary_components`,
+  DEDUCTION_POLICIES: `${STORAGE_PREFIX}deduction_policies`,
   PAYROLL_PERIODS: `${STORAGE_PREFIX}payroll_periods`,
   PAYSLIPS: `${STORAGE_PREFIX}payslips`,
   PAYROLL_STATUTORY_CONFIG: `${STORAGE_PREFIX}payroll_statutory_config`,
@@ -163,12 +180,21 @@ export class StorageEngine {
         }
       }
 
-      // Ensure PAYROLL_CYCLES and ATTENDANCE_POLICIES exist
+      // Ensure PAYROLL_CYCLES, ATTENDANCE_POLICIES, OVERTIME_CONFIG, SALARY_COMPONENTS, and DEDUCTION_POLICIES exist
       if (!safeStorage.getItem(STORAGE_KEYS.PAYROLL_CYCLES)) {
         safeStorage.setItem(STORAGE_KEYS.PAYROLL_CYCLES, JSON.stringify(INITIAL_PAYROLL_CYCLES));
       }
       if (!safeStorage.getItem(STORAGE_KEYS.ATTENDANCE_POLICIES)) {
         safeStorage.setItem(STORAGE_KEYS.ATTENDANCE_POLICIES, JSON.stringify(INITIAL_ATTENDANCE_POLICIES));
+      }
+      if (!safeStorage.getItem(STORAGE_KEYS.OVERTIME_CONFIG)) {
+        safeStorage.setItem(STORAGE_KEYS.OVERTIME_CONFIG, JSON.stringify(INITIAL_OVERTIME_CONFIGS));
+      }
+      if (!safeStorage.getItem(STORAGE_KEYS.SALARY_COMPONENTS)) {
+        safeStorage.setItem(STORAGE_KEYS.SALARY_COMPONENTS, JSON.stringify(INITIAL_SALARY_COMPONENTS));
+      }
+      if (!safeStorage.getItem(STORAGE_KEYS.DEDUCTION_POLICIES)) {
+        safeStorage.setItem(STORAGE_KEYS.DEDUCTION_POLICIES, JSON.stringify(INITIAL_DEDUCTION_POLICIES));
       }
 
       // Sync employees to ensure payrollCycleId and attendancePolicyId default if missing
@@ -242,6 +268,9 @@ export class StorageEngine {
     safeStorage.setItem(STORAGE_KEYS.GEO_LOCATIONS, JSON.stringify(INITIAL_GEO_LOCATIONS));
     safeStorage.setItem(STORAGE_KEYS.PAYROLL_CYCLES, JSON.stringify(INITIAL_PAYROLL_CYCLES));
     safeStorage.setItem(STORAGE_KEYS.ATTENDANCE_POLICIES, JSON.stringify(INITIAL_ATTENDANCE_POLICIES));
+    safeStorage.setItem(STORAGE_KEYS.OVERTIME_CONFIG, JSON.stringify(INITIAL_OVERTIME_CONFIGS));
+    safeStorage.setItem(STORAGE_KEYS.SALARY_COMPONENTS, JSON.stringify(INITIAL_SALARY_COMPONENTS));
+    safeStorage.setItem(STORAGE_KEYS.DEDUCTION_POLICIES, JSON.stringify(INITIAL_DEDUCTION_POLICIES));
     safeStorage.setItem(STORAGE_KEYS.PAYROLL_PERIODS, JSON.stringify([]));
     safeStorage.setItem(STORAGE_KEYS.PAYSLIPS, JSON.stringify([]));
     safeStorage.setItem(STORAGE_KEYS.HOLIDAYS, JSON.stringify(INITIAL_HOLIDAYS));
