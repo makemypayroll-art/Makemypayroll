@@ -24,9 +24,11 @@ import {
   INITIAL_TENANT_SUBSCRIPTIONS,
   INITIAL_TENANT_LICENSE_CHANGES,
   INITIAL_TENANT_PAYMENTS,
+  INITIAL_PAYROLL_CYCLES,
+  INITIAL_ATTENDANCE_POLICIES,
   generateSeedAttendance,
 } from './seedData';
-import { Tenant, TenantSubscription, TenantLicenseChange, TenantPayment, AdminImpersonationSession } from './schema';
+import { Tenant, TenantSubscription, TenantLicenseChange, TenantPayment, AdminImpersonationSession, PayrollCycle, AttendancePolicy } from './schema';
 
 const STORAGE_PREFIX = 'novapulse_hrms_v1_';
 
@@ -61,6 +63,8 @@ export const STORAGE_KEYS = {
   GEO_TRACKING_CONFIGS: `${STORAGE_PREFIX}geo_tracking_configs`,
   GEO_LOCATION_POINTS: `${STORAGE_PREFIX}geo_location_points`,
   GEO_FENCE_EVENTS: `${STORAGE_PREFIX}geo_fence_events`,
+  PAYROLL_CYCLES: `${STORAGE_PREFIX}payroll_cycles`,
+  ATTENDANCE_POLICIES: `${STORAGE_PREFIX}attendance_policies`,
   PAYROLL_PERIODS: `${STORAGE_PREFIX}payroll_periods`,
   PAYSLIPS: `${STORAGE_PREFIX}payslips`,
   PAYROLL_STATUTORY_CONFIG: `${STORAGE_PREFIX}payroll_statutory_config`,
@@ -159,6 +163,38 @@ export class StorageEngine {
         }
       }
 
+      // Ensure PAYROLL_CYCLES and ATTENDANCE_POLICIES exist
+      if (!safeStorage.getItem(STORAGE_KEYS.PAYROLL_CYCLES)) {
+        safeStorage.setItem(STORAGE_KEYS.PAYROLL_CYCLES, JSON.stringify(INITIAL_PAYROLL_CYCLES));
+      }
+      if (!safeStorage.getItem(STORAGE_KEYS.ATTENDANCE_POLICIES)) {
+        safeStorage.setItem(STORAGE_KEYS.ATTENDANCE_POLICIES, JSON.stringify(INITIAL_ATTENDANCE_POLICIES));
+      }
+
+      // Sync employees to ensure payrollCycleId and attendancePolicyId default if missing
+      const empStr = safeStorage.getItem(STORAGE_KEYS.EMPLOYEES);
+      if (empStr) {
+        try {
+          const emps: any[] = JSON.parse(empStr);
+          let empUpdated = false;
+          emps.forEach(emp => {
+            if (!emp.payrollCycleId) {
+              emp.payrollCycleId = 'cycle-001';
+              empUpdated = true;
+            }
+            if (!emp.attendancePolicyId) {
+              emp.attendancePolicyId = 'pol-001';
+              empUpdated = true;
+            }
+          });
+          if (empUpdated) {
+            safeStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(emps));
+          }
+        } catch (e) {
+          console.error('Failed to sync employee payroll/attendance policy defaults in init', e);
+        }
+      }
+
       // Sync organization record if initialized with legacy id
       const orgStr = safeStorage.getItem(STORAGE_KEYS.ORGANIZATION);
       if (orgStr) {
@@ -204,6 +240,8 @@ export class StorageEngine {
     safeStorage.setItem(STORAGE_KEYS.ASSETS, JSON.stringify(INITIAL_ASSETS));
     safeStorage.setItem(STORAGE_KEYS.ASSET_HISTORY, JSON.stringify([]));
     safeStorage.setItem(STORAGE_KEYS.GEO_LOCATIONS, JSON.stringify(INITIAL_GEO_LOCATIONS));
+    safeStorage.setItem(STORAGE_KEYS.PAYROLL_CYCLES, JSON.stringify(INITIAL_PAYROLL_CYCLES));
+    safeStorage.setItem(STORAGE_KEYS.ATTENDANCE_POLICIES, JSON.stringify(INITIAL_ATTENDANCE_POLICIES));
     safeStorage.setItem(STORAGE_KEYS.PAYROLL_PERIODS, JSON.stringify([]));
     safeStorage.setItem(STORAGE_KEYS.PAYSLIPS, JSON.stringify([]));
     safeStorage.setItem(STORAGE_KEYS.HOLIDAYS, JSON.stringify(INITIAL_HOLIDAYS));

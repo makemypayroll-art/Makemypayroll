@@ -353,6 +353,8 @@ export interface Employee {
   relievingReason?: string;
   
   assignedShiftId: string;
+  payrollCycleId?: string;
+  attendancePolicyId?: string;
   salaryStructure: SalaryStructure;
   bankDetails: BankDetails;
   statutoryDetails: StatutoryDetails;
@@ -709,6 +711,67 @@ export interface OfficeGeoLocation {
   radiusMeters: number;
   isRestricted: boolean;
   isActive: boolean;
+}
+
+// -------------------------------------------------------------
+// PAYROLL CONFIGURATION: CYCLES & ATTENDANCE POLICIES
+// -------------------------------------------------------------
+
+export interface PayrollCycle {
+  id: string; // e.g. "cycle-001"
+  organizationId: string;
+  name: string; // e.g. "Monthly (1st to 30th/31st)", "Mid-Month (20th to 19th)", "Cut-off (26th to 25th)"
+  startDay: number; // 1 to 31
+  endDay: number; // 1 to 31
+  isDefault?: boolean;
+  status: 'Active' | 'Inactive';
+  description?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AttendancePolicy {
+  id: string; // e.g. "pol-001"
+  organizationId: string;
+  name: string; // e.g. "Standard Corporate Policy", "Factory Staff Policy"
+  description?: string;
+  isDefault?: boolean;
+  status: 'Active' | 'Inactive';
+  
+  // Basic Attendance Settings
+  fullDayHours: number; // e.g. 8 or 9
+  halfDayHours: number; // e.g. 4.5
+  fullDayCreditToleranceMinutes: number; // e.g. 15
+  minimumOtHoursDaily: number; // e.g. 1
+  otPunchGapSeconds: number; // e.g. 60
+  maxLeaveCarryoverDays: number; // e.g. 10
+  
+  // Policy Controls
+  enableOvertime: boolean;
+  overtimePayScale: number; // 1.0, 1.5, 2.0
+  countOutsideShiftHours: boolean;
+  salesProductivityAttendance: boolean;
+  
+  // OT Detection
+  otDetectionEnabled: boolean;
+  otDetectionMode: 'after_shift' | 'before_shift' | 'both';
+  otWindowMinutes: number;
+  
+  // Late Coming Configuration
+  dailyLateAllowanceMinutes: number; // Grace allowance in minutes
+  lateComingGraceMinutes: number;
+  maxMonthlyLatenessAllowed: number; // e.g. 3
+  latePenaltyType: 'Deduction' | 'HalfDay' | 'Warning' | 'None';
+  latePenaltyValue: number; // e.g. 0.5 (half-day LOP)
+  
+  // Full-Day Credit Logic
+  fullDayCreditLogic: 'inside_shift_only' | 'can_stay_late';
+  differentWorkingHoursPerDay?: Record<string, number>;
+  
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // -------------------------------------------------------------

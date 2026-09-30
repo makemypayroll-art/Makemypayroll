@@ -22,7 +22,8 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useOrganization } from '../../context/OrganizationContext';
 import { EmployeeService } from '../../services/employeeService';
-import { ShiftService } from '../../services/shiftService';
+import { PayrollCycleService } from '../../services/payroll/payrollCycleService';
+import { AttendancePolicyService } from '../../services/payroll/attendancePolicyService';
 import { Employee, EmploymentStatus } from '../../database/schema';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -36,9 +37,12 @@ import { formatDate, formatCurrencyINR } from '../../utils/dateUtils';
 import { StorageEngine } from '../../database/storageEngine';
 
 export const EmployeeModule: React.FC = () => {
-  const { currentUser, isSuperAdmin, isHR, isManager } = useAuth();
+  const { currentUser, isSuperAdmin, isHR, isManager, activeTenant } = useAuth();
   const { departments, designations, branches, activeBranchId } = useOrganization();
   const [dataVersion, setDataVersion] = useState(0);
+
+  const activeCycles = PayrollCycleService.getAll(activeTenant?.tenantId).filter(c => c.status === 'Active');
+  const activePolicies = AttendancePolicyService.getAll(activeTenant?.tenantId).filter(p => p.status === 'Active');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
@@ -63,6 +67,8 @@ export const EmployeeModule: React.FC = () => {
     designationId: '',
     branchId: '',
     reportingManagerId: '',
+    payrollCycleId: activeCycles[0]?.id || 'cycle-001',
+    attendancePolicyId: activePolicies[0]?.id || 'pol-001',
     joiningDate: new Date().toISOString().split('T')[0],
     employmentType: 'Full-time' as const,
     employmentStatus: 'Active' as EmploymentStatus,
@@ -100,10 +106,18 @@ export const EmployeeModule: React.FC = () => {
     });
   }
 
-  const shifts = ShiftService.getShifts();
-
   const handleCreateEmployee = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!empForm.payrollCycleId) {
+      alert('Payroll Cycle is a mandatory field. Please select an active Payroll Cycle.');
+      return;
+    }
+
+    if (!empForm.attendancePolicyId) {
+      alert('Attendance Policy is a mandatory field. Please select an active Attendance Policy.');
+      return;
+    }
 
     const gross = Number(empForm.grossSalary) || 50000;
     const basic = Math.round(gross * 0.5);
@@ -121,6 +135,8 @@ export const EmployeeModule: React.FC = () => {
       departmentId: empForm.departmentId || departments[0]?.id || 'dept-eng-01',
       designationId: empForm.designationId || designations[0]?.id || 'desig-08',
       reportingManagerId: empForm.reportingManagerId || undefined,
+      payrollCycleId: empForm.payrollCycleId,
+      attendancePolicyId: empForm.attendancePolicyId,
       firstName: empForm.firstName,
       lastName: empForm.lastName,
       email: empForm.email,
@@ -132,7 +148,7 @@ export const EmployeeModule: React.FC = () => {
       employmentType: empForm.employmentType,
       employmentStatus: empForm.employmentStatus,
       noticePeriodDays: 30,
-      assignedShiftId: shifts[0]?.id || 'shift-gen-01',
+      assignedShiftId: 'shift-gen-01',
       salaryStructure: {
         basicSalary: basic,
         hra: hra,
@@ -229,6 +245,36 @@ export const EmployeeModule: React.FC = () => {
           <div>
             <div className="text-xs font-semibold text-slate-700">{branch?.city || 'Noida'}</div>
             <div className="text-[11px] text-slate-400">Joined {formatDate(emp.joiningDate)}</div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'payrollPolicy',
+      header: 'Payroll & Policy',
+      render: (emp) => {
+        const cycle = PayrollCycleService.getById(emp.payrollCycleId || '');
+        const policy = AttendancePolicyService.getById(emp.attendancePolicyId || '');
+        return (
+          <div className="space-y-0.5">
+            <div className="text-xs font-extrabold text-slate-900">
+              {cycle ? (
+                <span>{cycle.name.split('(')[0]}</span>
+              ) : (
+                <span className="text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded text-[10px]">
+                  Cycle Unassigned
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {policy ? (
+                <span>{policy.name}</span>
+              ) : (
+                <span className="text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded text-[10px]">
+                  Policy Unassigned
+                </span>
+              )}
+            </div>
           </div>
         );
       },
@@ -460,6 +506,45 @@ export const EmployeeModule: React.FC = () => {
             </Select>
           </div>
 
+          {/* Mandatory Payroll Cycle & Attendance Policy Mapping */}
+          <div className="p-4 bg-brand-50/60 rounded-2xl border border-brand-200/80 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-brand-600"></span>
+              <span className="text-xs font-extrabold text-brand-950 uppercase tracking-wider">
+                Mandatory Payroll & Attendance Mapping
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Select
+                label="Payroll Cycle *"
+                value={empForm.payrollCycleId}
+                onChange={e => setEmpForm({ ...empForm, payrollCycleId: e.target.value })}
+                required
+              >
+                <option value="">-- Select Payroll Cycle * --</option>
+                {activeCycles.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.startDay}th – {c.endDay}th)
+                  </option>
+                ))}
+              </Select>
+
+              <Select
+                label="Attendance Policy *"
+                value={empForm.attendancePolicyId}
+                onChange={e => setEmpForm({ ...empForm, attendancePolicyId: e.target.value })}
+                required
+              >
+                <option value="">-- Select Attendance Policy * --</option>
+                {activePolicies.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.fullDayHours}h Full / {p.halfDayHours}h Half)
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
             <Input
               label="Gross Monthly Salary (₹)"
@@ -556,6 +641,65 @@ export const EmployeeModule: React.FC = () => {
               </div>
 
               <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2">
+                <span className="font-bold text-slate-400 uppercase tracking-wider block">Payroll & Attendance Policy</span>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Payroll Cycle:</span>
+                    {(isSuperAdmin || isHR) ? (
+                      <select
+                        value={selectedEmp.payrollCycleId || ''}
+                        onChange={(e) => {
+                          EmployeeService.update(selectedEmp.id, { payrollCycleId: e.target.value });
+                          setSelectedEmp({ ...selectedEmp, payrollCycleId: e.target.value });
+                          setDataVersion(v => v + 1);
+                        }}
+                        className="text-xs font-bold text-slate-900 border border-slate-300 rounded-lg px-2 py-1 bg-white outline-none"
+                      >
+                        <option value="">-- Assign Cycle --</option>
+                        {activeCycles.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name} ({c.startDay}th – {c.endDay}th)
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="font-bold text-slate-900">
+                        {PayrollCycleService.getById(selectedEmp.payrollCycleId || '')?.name || 'Unassigned'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500">Attendance Policy:</span>
+                    {(isSuperAdmin || isHR) ? (
+                      <select
+                        value={selectedEmp.attendancePolicyId || ''}
+                        onChange={(e) => {
+                          EmployeeService.update(selectedEmp.id, { attendancePolicyId: e.target.value });
+                          setSelectedEmp({ ...selectedEmp, attendancePolicyId: e.target.value });
+                          setDataVersion(v => v + 1);
+                        }}
+                        className="text-xs font-bold text-slate-900 border border-slate-300 rounded-lg px-2 py-1 bg-white outline-none"
+                      >
+                        <option value="">-- Assign Policy --</option>
+                        {activePolicies.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.fullDayHours}h)
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className="font-bold text-slate-900">
+                        {AttendancePolicyService.getById(selectedEmp.attendancePolicyId || '')?.name || 'Unassigned'}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2">
                 <span className="font-bold text-slate-400 uppercase tracking-wider block">Salary & Compensation</span>
                 {(isSuperAdmin || isHR || currentUser.employeeId === selectedEmp.id) ? (
                   <>
@@ -576,15 +720,15 @@ export const EmployeeModule: React.FC = () => {
                   <p className="text-slate-400 italic">Confidential salary information restricted by RBAC.</p>
                 )}
               </div>
-            </div>
 
-            <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2 text-xs">
-              <span className="font-bold text-slate-400 uppercase tracking-wider block">Bank & Statutory</span>
-              <div className="grid grid-cols-2 gap-2">
-                <div>Bank: <span className="font-bold text-slate-900">{selectedEmp.bankDetails.bankName}</span></div>
-                <div>Account: <span className="font-bold text-slate-900 font-mono">{selectedEmp.bankDetails.accountNumber}</span></div>
-                <div>PAN: <span className="font-bold text-slate-900 font-mono">{selectedEmp.statutoryDetails.pan}</span></div>
-                <div>UAN: <span className="font-bold text-slate-900 font-mono">{selectedEmp.statutoryDetails.uan || '—'}</span></div>
+              <div className="p-4 bg-white rounded-xl border border-slate-200 space-y-2">
+                <span className="font-bold text-slate-400 uppercase tracking-wider block">Bank & Statutory</span>
+                <div className="space-y-1">
+                  <div>Bank: <span className="font-bold text-slate-900">{selectedEmp.bankDetails.bankName}</span></div>
+                  <div>Account: <span className="font-bold text-slate-900 font-mono">{selectedEmp.bankDetails.accountNumber}</span></div>
+                  <div>PAN: <span className="font-bold text-slate-900 font-mono">{selectedEmp.statutoryDetails.pan}</span></div>
+                  <div>UAN: <span className="font-bold text-slate-900 font-mono">{selectedEmp.statutoryDetails.uan || '—'}</span></div>
+                </div>
               </div>
             </div>
           </div>

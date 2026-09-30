@@ -22,6 +22,8 @@ import { PayrollLoanService } from './payrollLoanService';
 import { PayrollAdvanceService } from './payrollAdvanceService';
 import { PayrollReimbursementService } from './payrollReimbursementService';
 import { PayrollOvertimeService, PayrollEncashmentService } from './payrollOvertimeService';
+import { PayrollCycleService } from './payrollCycleService';
+import { AttendancePolicyService } from './attendancePolicyService';
 
 export interface EmployeeSalaryBreakup {
   employee: Employee;
@@ -89,48 +91,34 @@ export class PayrollCalculationService {
     const periodId = params.periodId || `pay-${year}-${month.toString().padStart(2, '0')}`;
     const monthStr = `${year}-${month.toString().padStart(2, '0')}`;
 
-    // 1. Attendance & LOP Analysis
-    const startMonth = `${year}-${month.toString().padStart(2, '0')}-01`;
-    const endMonth = `${year}-${month.toString().padStart(2, '0')}-31`;
+    // 1. Dynamic Payroll Cycle & Period Resolution
+    const cycle = employee.payrollCycleId
+      ? PayrollCycleService.getById(employee.payrollCycleId) || PayrollCycleService.getDefaultCycle(tenantId)
+      : PayrollCycleService.getDefaultCycle(tenantId);
+    const periodDates = PayrollCycleService.calculatePeriodDates(cycle, year, month);
+
+    // 2. Attendance & LOP Policy Evaluation
     const empAttendance = AttendanceService.getAll().filter(
-      a => a.employeeId === employee.id && a.date >= startMonth && a.date <= endMonth
+      a => a.employeeId === employee.id && a.date >= periodDates.startDate && a.date <= periodDates.endDate
     );
 
-    let presentDays = 0;
-    let halfDays = 0;
-    let paidLeaveDays = 0;
-    let lopDays = 0;
-    let weeklyOffDays = 4; // Standard 4 Sundays
-    let holidayDays = 1;
-    let overtimeHours = 0;
+    const policy = employee.attendancePolicyId
+      ? AttendancePolicyService.getById(employee.attendancePolicyId) || AttendancePolicyService.getDefaultPolicy(tenantId)
+      : AttendancePolicyService.getDefaultPolicy(tenantId);
 
-    empAttendance.forEach(att => {
-      if (att.status === 'Present' || att.status === 'Work From Home' || att.status === 'On Duty') {
-        presentDays += 1;
-      } else if (att.status === 'Half-Day') {
-        halfDays += 1;
-        presentDays += 0.5;
-        lopDays += 0.5;
-      } else if (att.status === 'Leave') {
-        paidLeaveDays += 1;
-      } else if (att.status === 'Absent') {
-        lopDays += 1;
-      } else if (att.status === 'Weekly Off') {
-        weeklyOffDays += 1;
-      } else if (att.status === 'Holiday') {
-        holidayDays += 1;
-      }
-      if ((att as any).overtimeHours) {
-        overtimeHours += (att as any).overtimeHours;
-      }
+    const evalResult = AttendancePolicyService.evaluateAttendanceForPayroll({
+      attendance: empAttendance,
+      policy,
+      totalWorkingDays,
     });
 
-    // If attendance was not populated, fallback to full attendance
-    if (empAttendance.length === 0) {
-      presentDays = totalWorkingDays;
-      paidLeaveDays = 0;
-      lopDays = 0;
-    }
+    const presentDays = evalResult.presentDays;
+    const halfDays = evalResult.halfDays;
+    const paidLeaveDays = evalResult.paidLeaveDays;
+    const lopDays = evalResult.totalLopDays;
+    const weeklyOffDays = evalResult.weeklyOffDays || 4; // Standard 4 Sundays
+    const holidayDays = evalResult.holidayDays || 1;
+    let overtimeHours = evalResult.overtimeHours;
 
     const paymentDays = Math.max(0, totalWorkingDays - lopDays);
 

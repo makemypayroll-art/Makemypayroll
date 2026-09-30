@@ -42,6 +42,7 @@ import { PayrollLoanService } from '../../services/payroll/payrollLoanService';
 import { PayrollAdvanceService } from '../../services/payroll/payrollAdvanceService';
 import { PayrollReimbursementService } from '../../services/payroll/payrollReimbursementService';
 import { PayrollOvertimeService, PayrollEncashmentService } from '../../services/payroll/payrollOvertimeService';
+import { PayrollConfigurationTab } from './components/PayrollConfigurationTab';
 import {
   Payslip,
   PayrollPeriod,
@@ -68,7 +69,7 @@ export const PayrollModule: React.FC = () => {
   const [dataVersion, setDataVersion] = useState(0);
 
   // Sub-tabs navigation
-  const [activeTab, setActiveTab] = useState<'runs' | 'payslips' | 'pf_esi' | 'tds' | 'loans' | 'advances' | 'reimbursements' | 'overtime' | 'settings'>('runs');
+  const [activeTab, setActiveTab] = useState<'runs' | 'payslips' | 'pf_esi' | 'tds' | 'loans' | 'advances' | 'reimbursements' | 'overtime' | 'settings' | 'config'>('runs');
 
   const [selectedMonth, setSelectedMonth] = useState(9); // September
   const [selectedYear, setSelectedYear] = useState(2026);
@@ -370,6 +371,7 @@ export const PayrollModule: React.FC = () => {
           { id: 'reimbursements', label: 'Reimbursements', icon: <Receipt className="w-3.5 h-3.5" /> },
           { id: 'overtime', label: 'Overtime & Encashment', icon: <Clock className="w-3.5 h-3.5" /> },
           { id: 'settings', label: 'Statutory Config', icon: <Sliders className="w-3.5 h-3.5" /> },
+          { id: 'config', label: 'Payroll Configuration', icon: <Sliders className="w-3.5 h-3.5" /> },
         ].map(tab => (
           <button
             key={tab.id}
@@ -1088,6 +1090,11 @@ export const PayrollModule: React.FC = () => {
             <span>Statutory rules should be verified by finance and payroll administrators before monthly finalized processing.</span>
           </div>
         </Card>
+      )}
+
+      {/* TAB 10: PAYROLL CONFIGURATION (Payroll Cycle & Attendance Policy) */}
+      {activeTab === 'config' && (
+        <PayrollConfigurationTab />
       )}
 
       {/* PAYSLIP DETAIL MODAL */}
