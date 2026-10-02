@@ -16,6 +16,8 @@ import {
   Plus,
   ArrowRight,
   TrendingUp,
+  ListChecks,
+  Trash2,
 } from 'lucide-react';
 import { Modal } from '../../../components/common/Modal';
 import { Button } from '../../../components/common/Button';
@@ -39,14 +41,17 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   onTaskUpdated,
 }) => {
   const { currentUser, currentEmployee } = useAuth();
-  const [activeTab, setActiveTab] = useState<'details' | 'comments' | 'attachments' | 'activity'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'checklist' | 'comments' | 'attachments' | 'activity'>('details');
   const [commentText, setCommentText] = useState('');
   const [status, setStatus] = useState<TaskStatus>(task?.status || 'Not Started');
   const [progress, setProgress] = useState<number>(task?.progress || 0);
   const [isUpdating, setIsUpdating] = useState(false);
   const [newAttachmentName, setNewAttachmentName] = useState('');
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
 
   if (!task) return null;
+
+  const isOverdue = TaskService.isTaskOverdue(task);
 
   const getPriorityBadge = (priority: TaskPriority) => {
     switch (priority) {
@@ -62,6 +67,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   };
 
   const getStatusBadge = (st: TaskStatus) => {
+    if (isOverdue) {
+      return <Badge variant="danger">Overdue</Badge>;
+    }
     switch (st) {
       case 'Completed':
         return <Badge variant="success">Completed</Badge>;
@@ -97,6 +105,36 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       }
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleToggleSubtask = (subtaskId: string) => {
+    const updated = TaskService.toggleSubtask(task.id, subtaskId, currentUser, currentEmployee);
+    if (updated) {
+      setStatus(updated.status);
+      setProgress(updated.progress);
+      onTaskUpdated(updated);
+    }
+  };
+
+  const handleAddSubtask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSubtaskTitle.trim()) return;
+    const updated = TaskService.addSubtask(task.id, newSubtaskTitle.trim(), currentUser, currentEmployee);
+    if (updated) {
+      setStatus(updated.status);
+      setProgress(updated.progress);
+      onTaskUpdated(updated);
+      setNewSubtaskTitle('');
+    }
+  };
+
+  const handleDeleteSubtask = (subtaskId: string) => {
+    const updated = TaskService.deleteSubtask(task.id, subtaskId, currentUser, currentEmployee);
+    if (updated) {
+      setStatus(updated.status);
+      setProgress(updated.progress);
+      onTaskUpdated(updated);
     }
   };
 
@@ -136,6 +174,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   };
 
+  const completedSubtasksCount = (task.subtasks || []).filter(s => s.isCompleted).length;
+  const totalSubtasksCount = (task.subtasks || []).length;
+
   return (
     <Modal
       isOpen={isOpen}
@@ -167,7 +208,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           <div className="flex items-center gap-4 border-t md:border-t-0 md:border-l border-slate-700/60 pt-3 md:pt-0 md:pl-5">
             <div className="text-center">
               <span className="text-[10px] uppercase font-bold text-slate-400 block">Due Date</span>
-              <span className="text-sm font-bold text-white flex items-center gap-1 justify-center">
+              <span className={`text-sm font-bold flex items-center gap-1 justify-center ${isOverdue ? 'text-rose-400' : 'text-white'}`}>
                 <Calendar className="w-3.5 h-3.5 text-brand-400" />
                 {task.dueDate}
               </span>
@@ -241,11 +282,11 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         </div>
 
         {/* Modal Navigation Tabs */}
-        <div className="flex border-b border-slate-200">
+        <div className="flex border-b border-slate-200 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('details')}
-            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'details'
                 ? 'border-brand-600 text-brand-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -256,20 +297,32 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           </button>
           <button
             type="button"
+            onClick={() => setActiveTab('checklist')}
+            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
+              activeTab === 'checklist'
+                ? 'border-brand-600 text-brand-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <ListChecks className="w-4 h-4" />
+            Checklist ({completedSubtasksCount}/{totalSubtasksCount})
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveTab('comments')}
-            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'comments'
                 ? 'border-brand-600 text-brand-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <MessageSquare className="w-4 h-4" />
-            Comments & Discussion ({task.comments?.length || 0})
+            Comments ({task.comments?.length || 0})
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('attachments')}
-            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'attachments'
                 ? 'border-brand-600 text-brand-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -281,14 +334,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('activity')}
-            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 ${
+            className={`pb-3 px-4 text-xs font-bold border-b-2 transition-all flex items-center gap-2 shrink-0 ${
               activeTab === 'activity'
                 ? 'border-brand-600 text-brand-700'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Activity className="w-4 h-4" />
-            Activity Timeline ({task.activities?.length || 0})
+            Activity Log ({task.activities?.length || 0})
           </button>
         </div>
 
@@ -333,6 +386,87 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 <span className="text-xs font-bold text-slate-900">{task.createdAt ? formatDate(task.createdAt) : 'Recent'}</span>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Tab: Checklist / Subtasks */}
+        {activeTab === 'checklist' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-800">Checklist Items:</span>
+                <span className="text-xs font-extrabold text-brand-700">
+                  {completedSubtasksCount} of {totalSubtasksCount} completed ({task.progress}%)
+                </span>
+              </div>
+              <div className="w-32 bg-slate-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-brand-600 h-full rounded-full transition-all"
+                  style={{ width: `${task.progress}%` }}
+                ></div>
+              </div>
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {!task.subtasks || task.subtasks.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                  No subtasks defined. Add checklist items below to track step-by-step progress.
+                </div>
+              ) : (
+                task.subtasks.map(st => (
+                  <div
+                    key={st.id}
+                    className={`p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                      st.isCompleted
+                        ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <label className="flex items-center gap-3 flex-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={st.isCompleted}
+                        onChange={() => handleToggleSubtask(st.id)}
+                        className="w-4 h-4 text-brand-600 rounded border-slate-300 focus:ring-brand-500 cursor-pointer"
+                      />
+                      <span className={`text-xs font-medium ${st.isCompleted ? 'line-through text-slate-500 font-normal' : 'text-slate-800 font-semibold'}`}>
+                        {st.title}
+                      </span>
+                    </label>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {st.completedAt && (
+                        <span className="text-[10px] text-emerald-700 font-medium">
+                          ✓ {formatDate(st.completedAt)}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSubtask(st.id)}
+                        className="text-slate-400 hover:text-rose-600 p-1 rounded"
+                        title="Delete subtask"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <form onSubmit={handleAddSubtask} className="flex gap-2 pt-2 border-t border-slate-200">
+              <input
+                type="text"
+                value={newSubtaskTitle}
+                onChange={e => setNewSubtaskTitle(e.target.value)}
+                placeholder="Add new checklist deliverable..."
+                className="flex-1 px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              <Button type="submit" variant="primary" size="md">
+                <Plus className="w-4 h-4 mr-1" />
+                Add Item
+              </Button>
+            </form>
           </div>
         )}
 

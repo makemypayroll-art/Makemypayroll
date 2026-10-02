@@ -89,6 +89,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: null,
     },
     {
+      id: 'tasks',
+      name: 'Task Management',
+      icon: <CheckSquare className="w-5 h-5" />,
+      moduleKey: 'tasks',
+      badge: pendingTasks > 0 ? `${pendingTasks}` : null,
+      badgeColor: 'bg-indigo-500 text-white',
+    },
+    {
       id: 'tickets',
       name: 'Ticket Management',
       icon: <LifeBuoy className="w-5 h-5" />,
@@ -124,14 +132,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <FileSpreadsheet className="w-5 h-5" />,
       moduleKey: 'payroll',
       badge: null,
-    },
-    {
-      id: 'tasks',
-      name: 'Task Management',
-      icon: <CheckSquare className="w-5 h-5" />,
-      moduleKey: 'tasks',
-      badge: pendingTasks > 0 ? `${pendingTasks}` : null,
-      badgeColor: 'bg-indigo-500 text-white',
     },
     {
       id: 'insights',

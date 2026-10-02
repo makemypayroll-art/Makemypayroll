@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Fingerprint,
   Download,
+  CheckSquare,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -37,6 +38,7 @@ import { TicketService } from '../../services/ticketService';
 import { InventoryService } from '../../services/inventoryService';
 import { OnboardingService } from '../../services/onboardingService';
 import { PayrollService } from '../../services/payrollService';
+import { TaskService } from '../../services/taskService';
 import { StatCard } from '../../components/common/StatCard';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -83,6 +85,12 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
   const submittedOnboarding = OnboardingService.getAll().filter(o => o.status === 'submitted');
   const totalAssets = InventoryService.getAll().length;
   const allocatedAssets = InventoryService.getAll().filter(a => a.status === 'Allocated').length;
+
+  // Task Management metrics
+  const allTasks = TaskService.getAllTasks();
+  const myTasks = currentEmployee ? TaskService.getMyTasks(currentEmployee.id) : allTasks;
+  const myPendingTasks = myTasks.filter(t => t.status !== 'Completed' && t.status !== 'Cancelled');
+  const myOverdueTasks = myTasks.filter(t => TaskService.isTaskOverdue(t));
 
   // Chart 1: Department Distribution
   const deptData = departments.map(d => ({
@@ -223,7 +231,7 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
         <StatCard
           title="Total Workforce"
           value={activeEmployees.length}
@@ -247,7 +255,7 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
         <StatCard
           title="Pending Approvals"
           value={pendingLeaves.length + pendingSwaps.length}
-          subtitle={`${pendingLeaves.length} Leaves • ${pendingSwaps.length} Shift Swaps`}
+          subtitle={`${pendingLeaves.length} Leaves • ${pendingSwaps.length} Shifts`}
           icon={<Clock className="w-6 h-6" />}
           iconBgColor="bg-amber-100 text-amber-800"
           onClick={() => onNavigate(pendingLeaves.length > 0 ? 'leaves' : 'shifts')}
@@ -260,6 +268,15 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
           icon={<LifeBuoy className="w-6 h-6" />}
           iconBgColor="bg-sky-100 text-sky-800"
           onClick={() => onNavigate('tickets')}
+        />
+
+        <StatCard
+          title="My Pending Tasks"
+          value={myPendingTasks.length}
+          subtitle={myOverdueTasks.length > 0 ? `${myOverdueTasks.length} Overdue SLA` : `${allTasks.filter(t => t.status === 'In Progress').length} Active in Org`}
+          icon={<CheckSquare className="w-6 h-6" />}
+          iconBgColor="bg-purple-100 text-purple-800"
+          onClick={() => onNavigate('tasks')}
         />
       </div>
 
@@ -348,7 +365,7 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
       </div>
 
       {/* Action Items & Quick Queues */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Pending Shift Swaps Queue */}
         <Card
           title="Pending Shift Swap Requests"
@@ -365,7 +382,7 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {pendingSwaps.map(swap => {
+              {pendingSwaps.slice(0, 4).map(swap => {
                 const empA = EmployeeService.getById(swap.requesterEmployeeId);
                 const empB = EmployeeService.getById(swap.targetEmployeeId);
                 return (
@@ -417,7 +434,7 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {pendingLeaves.map(app => {
+              {pendingLeaves.slice(0, 4).map(app => {
                 const emp = EmployeeService.getById(app.employeeId);
                 const leaveType = LeaveService.getLeaveTypeById(app.leaveTypeId);
                 return (
@@ -458,6 +475,53 @@ export const DashboardModule: React.FC<{ onNavigate: (module: string) => void }>
                         </>
                       )}
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        {/* My Active Tasks Queue */}
+        <Card
+          title="My Actionable Tasks"
+          subtitle="Assigned deliverables & deadlines"
+          action={
+            <Button size="sm" variant="ghost" onClick={() => onNavigate('tasks')}>
+              Task Hub <ArrowUpRight className="w-4 h-4 ml-1" />
+            </Button>
+          }
+        >
+          {myPendingTasks.length === 0 ? (
+            <div className="py-8 text-center text-slate-400 text-xs">
+              ✓ All assigned tasks completed.
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {myPendingTasks.slice(0, 4).map(task => {
+                const isOverdue = TaskService.isTaskOverdue(task);
+                return (
+                  <div
+                    key={task.id}
+                    onClick={() => onNavigate('tasks')}
+                    className="py-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50 rounded-lg px-1 transition-colors"
+                  >
+                    <div className="overflow-hidden space-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-[11px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded">
+                          {task.taskCode}
+                        </span>
+                        <span className="text-xs font-bold text-slate-900 truncate">
+                          {task.title}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Due: <span className={isOverdue ? 'text-rose-600 font-bold' : 'font-semibold'}>{task.dueDate}</span> • {task.progress}% done
+                      </div>
+                    </div>
+                    <Badge variant={isOverdue ? 'danger' : task.priority === 'Urgent' ? 'danger' : 'info'}>
+                      {isOverdue ? 'Overdue' : task.priority}
+                    </Badge>
                   </div>
                 );
               })}

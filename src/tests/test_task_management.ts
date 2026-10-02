@@ -277,6 +277,103 @@ function runTests() {
   );
 
   // -------------------------------------------------------------
+  // TEST 9: Subtasks & Checklist Progress Tracking Engine
+  // -------------------------------------------------------------
+  console.log('\n--- TEST 9: Subtasks & Checklist Progress Tracking Engine ---');
+  const taskWithSubtasks = TaskService.createTask(
+    {
+      title: 'Payroll Bank E-Payment Gateway Integration',
+      description: 'Connect direct payout API with HDFC corporate banking portal.',
+      assignedToId: devEmp.id,
+      priority: 'High',
+      category: 'Finance',
+      startDate: '2026-10-01',
+      dueDate: '2026-10-15',
+      subtasks: [
+        { title: 'Download bank encryption certificate' },
+        { title: 'Implement AES-256 batch payout payload generator' },
+        { title: 'Validate IP whitelisting with network operations' },
+        { title: 'Conduct sandbox UAT transaction test' },
+      ],
+    },
+    superAdminUser
+  );
+
+  assert(
+    taskWithSubtasks.subtasks.length === 4 && taskWithSubtasks.progress === 0,
+    'Task created with 4 subtasks initialized at 0% progress'
+  );
+
+  // Toggle subtask 1
+  const sub1 = taskWithSubtasks.subtasks[0];
+  const toggled1 = TaskService.toggleSubtask(taskWithSubtasks.id, sub1.id, managerUser, managerEmp);
+  assert(
+    toggled1?.progress === 25 && toggled1.status === 'In Progress',
+    'Toggling 1 of 4 subtasks calculates 25% progress and sets status to In Progress'
+  );
+
+  // Toggle remaining 3 subtasks
+  TaskService.toggleSubtask(taskWithSubtasks.id, taskWithSubtasks.subtasks[1].id, managerUser, managerEmp);
+  TaskService.toggleSubtask(taskWithSubtasks.id, taskWithSubtasks.subtasks[2].id, managerUser, managerEmp);
+  const allDone = TaskService.toggleSubtask(taskWithSubtasks.id, taskWithSubtasks.subtasks[3].id, managerUser, managerEmp);
+  assert(
+    allDone?.progress === 100 && allDone.status === 'Completed' && !!allDone.completedAt,
+    'Toggling all 4 subtasks to 100% automatically completes task with completed timestamp'
+  );
+
+  // Uncheck subtask 1 -> Reverts to In Progress
+  const uncheck1 = TaskService.toggleSubtask(taskWithSubtasks.id, sub1.id, managerUser, managerEmp);
+  assert(
+    uncheck1?.progress === 75 && uncheck1.status === 'In Progress' && !uncheck1.completedAt,
+    'Unchecking a subtask reverts task status to In Progress and clears completed timestamp'
+  );
+
+  // -------------------------------------------------------------
+  // TEST 10: Dynamic Subtask Addition & Deletion
+  // -------------------------------------------------------------
+  console.log('\n--- TEST 10: Dynamic Subtask Addition & Deletion ---');
+  const addedSub = TaskService.addSubtask(taskWithSubtasks.id, 'Verify reverse webhook notifications', superAdminUser);
+  assert(
+    addedSub?.subtasks.length === 5 && addedSub.progress === 60,
+    'Dynamically adding 5th subtask recalculates progress to 60% (3/5 done)'
+  );
+
+  const lastSubId = addedSub!.subtasks[addedSub!.subtasks.length - 1].id;
+  const deletedSub = TaskService.deleteSubtask(taskWithSubtasks.id, lastSubId, superAdminUser);
+  assert(
+    deletedSub?.subtasks.length === 4 && deletedSub.progress === 75,
+    'Deleting subtask recalculates progress back to 75% (3/4 done)'
+  );
+
+  // -------------------------------------------------------------
+  // TEST 11: Overdue Detection & Intelligent Sorting
+  // -------------------------------------------------------------
+  console.log('\n--- TEST 11: Overdue Detection & Intelligent Sorting ---');
+  const pastDueTask = TaskService.createTask(
+    {
+      title: 'Past Due Audit Review',
+      description: 'Review Q3 compliance checklist.',
+      assignedToId: managerEmp.id,
+      priority: 'Urgent',
+      category: 'Operations',
+      startDate: '2026-09-01',
+      dueDate: '2026-09-10', // in past
+    },
+    superAdminUser
+  );
+
+  assert(
+    TaskService.isTaskOverdue(pastDueTask),
+    'isTaskOverdue returns true for uncompleted task past its deadline'
+  );
+
+  const allSorted = TaskService.sortTasks(TaskService.getAllTasks());
+  assert(
+    TaskService.isTaskOverdue(allSorted[0]),
+    'sortTasks places overdue items at the top of the queue'
+  );
+
+  // -------------------------------------------------------------
   // SUMMARY
   // -------------------------------------------------------------
   console.log('\n====================================================');

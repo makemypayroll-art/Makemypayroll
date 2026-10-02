@@ -1436,9 +1436,18 @@ export interface SystemPolicySettings {
 // -------------------------------------------------------------
 
 export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
-export type TaskStatus = 'Not Started' | 'In Progress' | 'Pending' | 'Completed' | 'Overdue' | 'Cancelled';
+export type TaskStatus = 'Pending' | 'In Progress' | 'On Hold' | 'Completed' | 'Cancelled' | 'Not Started' | 'Overdue';
 export type ProjectStatus = 'Draft' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
 export type ProjectStageStatus = 'Pending' | 'Active' | 'Completed' | 'Returned' | 'Locked';
+
+export interface TaskSubtask {
+  id: string;
+  taskId: string;
+  title: string;
+  isCompleted: boolean;
+  completedAt?: string;
+  completedBy?: string;
+}
 
 export interface TaskComment {
   id: string;
@@ -1472,7 +1481,7 @@ export interface TaskAttachment {
 
 export interface TaskItem {
   id: string;
-  taskCode: string; // e.g. "TSK-1001"
+  taskCode: string; // e.g. "TASK-0001" or "TSK-1001"
   organizationId: string;
   tenantId?: string;
   title: string;
@@ -1484,12 +1493,15 @@ export interface TaskItem {
   assignedToAvatar?: string;
   departmentId?: string;
   departmentName?: string;
+  designationId?: string;
+  designationTitle?: string;
   priority: TaskPriority;
-  category: string; // "Development", "HR & Admin", "Finance", "Sales", "Operations", "Compliance", "Client Support", "General"
+  category: string; // "General", "HR", "Sales", "Operations", "Finance", "Client", "Recruitment", "Internal", "Other"
   startDate: string; // YYYY-MM-DD
   dueDate: string;   // YYYY-MM-DD
   status: TaskStatus;
   progress: number; // 0 to 100
+  subtasks: TaskSubtask[];
   attachments: TaskAttachment[];
   additionalInstructions?: string;
   comments: TaskComment[];

@@ -2,6 +2,7 @@
 import { StorageEngine, STORAGE_KEYS } from '../database/storageEngine';
 import {
   TaskItem,
+  TaskSubtask,
   TaskComment,
   TaskActivity,
   TaskAttachment,
@@ -16,6 +17,7 @@ import {
   WorkflowTemplate,
   Employee,
   Department,
+  Designation,
   User,
   Notification,
 } from '../database/schema';
@@ -167,8 +169,13 @@ export class TaskService {
       category: string;
       startDate: string;
       dueDate: string;
+      designationId?: string;
+      designationTitle?: string;
+      departmentId?: string;
+      departmentName?: string;
       additionalInstructions?: string;
       attachments?: TaskAttachment[];
+      subtasks?: Array<{ title: string; isCompleted?: boolean }>;
     },
     currentUser: User,
     currentEmployee?: Employee
@@ -183,16 +190,32 @@ export class TaskService {
     // Resolve assignee details
     const allEmployees = StorageEngine.getList<Employee>(STORAGE_KEYS.EMPLOYEES);
     const allDepartments = StorageEngine.getList<Department>(STORAGE_KEYS.DEPARTMENTS);
+    const allDesignations = StorageEngine.getList<Designation>(STORAGE_KEYS.DESIGNATIONS);
+
     const assignee = allEmployees.find(e => e.id === params.assignedToId);
     const assigneeDept = assignee ? allDepartments.find(d => d.id === assignee.departmentId) : undefined;
+    const assigneeDesig = assignee ? allDesignations.find(d => d.id === assignee.designationId) : undefined;
 
     const assignerName = currentEmployee
       ? `${currentEmployee.firstName} ${currentEmployee.lastName}`
       : currentUser.fullName || 'System Admin';
 
     const assignerId = currentEmployee?.id || currentUser.id;
-
     const nowIso = new Date().toISOString();
+
+    // Prepare subtasks
+    const subtasksList: TaskSubtask[] = (params.subtasks || []).map((s, idx) => ({
+      id: `sub-${Date.now()}-${idx + 1}`,
+      taskId: '',
+      title: s.title.trim(),
+      isCompleted: !!s.isCompleted,
+      completedAt: s.isCompleted ? nowIso : undefined,
+      completedBy: s.isCompleted ? assignerName : undefined,
+    }));
+
+    const completedSub = subtasksList.filter(s => s.isCompleted).length;
+    const initialProgress = subtasksList.length > 0 ? Math.round((completedSub / subtasksList.length) * 100) : 0;
+    const initialStatus: TaskStatus = initialProgress === 100 ? 'Completed' : 'Not Started';
 
     const newTask: TaskItem = {
       id: `tsk-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -206,14 +229,17 @@ export class TaskService {
       assignedToId: params.assignedToId,
       assignedToName: assignee ? `${assignee.firstName} ${assignee.lastName}` : 'Unassigned',
       assignedToAvatar: assignee?.avatarUrl || (assignee as any)?.photo,
-      departmentId: assignee?.departmentId,
-      departmentName: assigneeDept?.name || 'General',
+      departmentId: params.departmentId || assignee?.departmentId,
+      departmentName: params.departmentName || assigneeDept?.name || 'General',
+      designationId: params.designationId || assignee?.designationId,
+      designationTitle: params.designationTitle || assigneeDesig?.title || '',
       priority: params.priority || 'Medium',
       category: params.category || 'General',
       startDate: params.startDate || new Date().toISOString().split('T')[0],
       dueDate: params.dueDate || new Date().toISOString().split('T')[0],
-      status: 'Not Started',
-      progress: 0,
+      status: initialStatus,
+      progress: initialProgress,
+      subtasks: subtasksList,
       attachments: params.attachments || [],
       additionalInstructions: params.additionalInstructions,
       comments: [],
@@ -231,6 +257,7 @@ export class TaskService {
       createdAt: nowIso,
       updatedAt: nowIso,
     };
+    newTask.subtasks.forEach(s => (s.taskId = newTask.id));
     newTask.activities[0].taskId = newTask.id;
 
     StorageEngine.insert<TaskItem>(STORAGE_KEYS.TASKS, newTask);
@@ -493,6 +520,232 @@ export class TaskService {
 
     StorageEngine.update<TaskItem>(STORAGE_KEYS.TASKS, taskId, updatedTask);
     return updatedTask;
+  }
+
+  // -------------------------------------------------------------
+  // SUBTASKS & INTERACTIVE CHECKLIST ENGINE
+  // -------------------------------------------------------------
+  public static toggleSubtask(
+    taskId: string,
+    subtaskId: string,
+    currentUser: User,
+    currentEmployee?: Employee
+  ): TaskItem | undefined {
+    const task = this.getTaskById(taskId);
+    if (!task) return undefined;
+
+    const userName = currentEmployee
+      ? `${currentEmployee.firstName} ${currentEmployee.lastName}`
+      : currentUser.fullName || 'User';
+
+    const nowIso = new Date().toISOString();
+    const subtasks = [...(task.subtasks || [])];
+    const target = subtasks.find(s => s.id === subtaskId);
+    if (!target) return undefined;
+
+    target.isCompleted = !target.isCompleted;
+    if (target.isCompleted) {
+      target.completedAt = nowIso;
+      target.completedBy = userName;
+    } else {
+      target.completedAt = undefined;
+      target.completedBy = undefined;
+    }
+
+    const totalSub = subtasks.length;
+    const compSub = subtasks.filter(s => s.isCompleted).length;
+    const newProgress = totalSub > 0 ? Math.round((compSub / totalSub) * 100) : task.progress;
+
+    let newStatus = task.status;
+    let completedAt = task.completedAt;
+
+    if (newProgress === 100) {
+      newStatus = 'Completed';
+      completedAt = completedAt || nowIso;
+    } else if (task.status === 'Completed' && newProgress < 100) {
+      newStatus = 'In Progress';
+      completedAt = undefined;
+    } else if (compSub > 0 && (task.status === 'Not Started' || task.status === 'Pending')) {
+      newStatus = 'In Progress';
+    }
+
+    const newActivities = [...(task.activities || [])];
+    newActivities.push({
+      id: `act-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      taskId,
+      userId: currentUser.id,
+      userName,
+      action: target.isCompleted ? 'Subtask Completed' : 'Subtask Reopened',
+      details: `${userName} ${target.isCompleted ? 'completed' : 'reopened'} checklist item "${target.title}" (Progress: ${newProgress}%).`,
+      timestamp: nowIso,
+    });
+
+    const updatedTask: TaskItem = {
+      ...task,
+      subtasks,
+      progress: newProgress,
+      status: newStatus,
+      completedAt,
+      activities: newActivities,
+      updatedAt: nowIso,
+    };
+
+    StorageEngine.update<TaskItem>(STORAGE_KEYS.TASKS, taskId, updatedTask);
+
+    AuditService.log(
+      'UPDATE',
+      'Task Management',
+      `Toggled checklist item "${target.title}" on ${task.taskCode} -> ${target.isCompleted ? 'Done' : 'Pending'} (${newProgress}%)`,
+      { id: currentUser.id, name: userName, role: currentUser.roleName },
+      { recordId: taskId, newValue: updatedTask }
+    );
+
+    return updatedTask;
+  }
+
+  public static addSubtask(
+    taskId: string,
+    title: string,
+    currentUser: User,
+    currentEmployee?: Employee
+  ): TaskItem | undefined {
+    const task = this.getTaskById(taskId);
+    if (!task || !title.trim()) return undefined;
+
+    const userName = currentEmployee
+      ? `${currentEmployee.firstName} ${currentEmployee.lastName}`
+      : currentUser.fullName || 'User';
+
+    const nowIso = new Date().toISOString();
+    const newSub: TaskSubtask = {
+      id: `sub-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      taskId,
+      title: title.trim(),
+      isCompleted: false,
+    };
+
+    const subtasks = [...(task.subtasks || []), newSub];
+    const totalSub = subtasks.length;
+    const compSub = subtasks.filter(s => s.isCompleted).length;
+    const newProgress = Math.round((compSub / totalSub) * 100);
+
+    let newStatus = task.status;
+    let completedAt = task.completedAt;
+    if (task.status === 'Completed' && newProgress < 100) {
+      newStatus = 'In Progress';
+      completedAt = undefined;
+    }
+
+    const newActivities = [...(task.activities || [])];
+    newActivities.push({
+      id: `act-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      taskId,
+      userId: currentUser.id,
+      userName,
+      action: 'Subtask Added',
+      details: `${userName} added subtask item: "${title.trim()}".`,
+      timestamp: nowIso,
+    });
+
+    const updatedTask: TaskItem = {
+      ...task,
+      subtasks,
+      progress: newProgress,
+      status: newStatus,
+      completedAt,
+      activities: newActivities,
+      updatedAt: nowIso,
+    };
+
+    StorageEngine.update<TaskItem>(STORAGE_KEYS.TASKS, taskId, updatedTask);
+    return updatedTask;
+  }
+
+  public static deleteSubtask(
+    taskId: string,
+    subtaskId: string,
+    currentUser: User,
+    currentEmployee?: Employee
+  ): TaskItem | undefined {
+    const task = this.getTaskById(taskId);
+    if (!task) return undefined;
+
+    const userName = currentEmployee
+      ? `${currentEmployee.firstName} ${currentEmployee.lastName}`
+      : currentUser.fullName || 'User';
+
+    const nowIso = new Date().toISOString();
+    const deletedSub = (task.subtasks || []).find(s => s.id === subtaskId);
+    const subtasks = (task.subtasks || []).filter(s => s.id !== subtaskId);
+    const totalSub = subtasks.length;
+    const compSub = subtasks.filter(s => s.isCompleted).length;
+    const newProgress = totalSub > 0 ? Math.round((compSub / totalSub) * 100) : 0;
+
+    let newStatus = task.status;
+    let completedAt = task.completedAt;
+    if (totalSub > 0 && newProgress === 100) {
+      newStatus = 'Completed';
+      completedAt = completedAt || nowIso;
+    } else if (task.status === 'Completed' && newProgress < 100) {
+      newStatus = 'In Progress';
+      completedAt = undefined;
+    }
+
+    const newActivities = [...(task.activities || [])];
+    newActivities.push({
+      id: `act-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      taskId,
+      userId: currentUser.id,
+      userName,
+      action: 'Subtask Removed',
+      details: `${userName} deleted subtask "${deletedSub?.title || subtaskId}".`,
+      timestamp: nowIso,
+    });
+
+    const updatedTask: TaskItem = {
+      ...task,
+      subtasks,
+      progress: newProgress,
+      status: newStatus,
+      completedAt,
+      activities: newActivities,
+      updatedAt: nowIso,
+    };
+
+    StorageEngine.update<TaskItem>(STORAGE_KEYS.TASKS, taskId, updatedTask);
+    return updatedTask;
+  }
+
+  public static isTaskOverdue(task: TaskItem): boolean {
+    if (task.status === 'Completed' || task.status === 'Cancelled') return false;
+    const today = new Date().toISOString().split('T')[0];
+    return task.dueDate < today;
+  }
+
+  public static sortTasks(tasks: TaskItem[]): TaskItem[] {
+    const priorityWeight: Record<TaskPriority, number> = {
+      Urgent: 4,
+      High: 3,
+      Medium: 2,
+      Low: 1,
+    };
+
+    return [...tasks].sort((a, b) => {
+      const aOverdue = TaskService.isTaskOverdue(a);
+      const bOverdue = TaskService.isTaskOverdue(b);
+      if (aOverdue && !bOverdue) return -1;
+      if (!aOverdue && bOverdue) return 1;
+
+      // Nearest due date first
+      if (a.dueDate !== b.dueDate) {
+        return a.dueDate.localeCompare(b.dueDate);
+      }
+
+      // Higher priority first
+      const aP = priorityWeight[a.priority] || 0;
+      const bP = priorityWeight[b.priority] || 0;
+      return bP - aP;
+    });
   }
 
   // -------------------------------------------------------------
