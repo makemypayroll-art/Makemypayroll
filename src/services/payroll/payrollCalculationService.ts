@@ -14,6 +14,7 @@ import {
   Branch,
   Department,
   Designation,
+  LeaveApplication,
 } from '../../database/schema';
 import { StorageEngine, STORAGE_KEYS } from '../../database/storageEngine';
 import { AttendanceService } from '../attendanceService';
@@ -28,6 +29,7 @@ import { PayrollOvertimeConfigService } from './payrollOvertimeConfigService';
 import { SalaryComponentService } from './salaryComponentService';
 import { DeductionPolicyService } from './deductionPolicyService';
 import { HolidayPayrollService } from './holidayPayrollService';
+import { LeavePayrollConfigService } from './leavePayrollConfigService';
 
 export interface EmployeeSalaryBreakup {
   employee: Employee;
@@ -123,12 +125,40 @@ export class PayrollCalculationService {
       attendance: empAttendance,
       policy,
       totalWorkingDays,
+      employeeId: employee.id,
+      year,
     });
 
-    const presentDays = evalResult.presentDays;
+    // Check for approved leave applications falling within period
+    const approvedLeaves = StorageEngine.getList<LeaveApplication>(STORAGE_KEYS.LEAVE_APPLICATIONS).filter(
+      a =>
+        a.employeeId === employee.id &&
+        a.status === 'approved' &&
+        a.startDate <= periodDates.endDate &&
+        a.endDate >= periodDates.startDate
+    );
+
+    let additionalLop = 0;
+    let additionalPaid = 0;
+
+    approvedLeaves.forEach(app => {
+      const hasAttendancePunch = empAttendance.some(att => att.date >= app.startDate && att.date <= app.endDate);
+      if (!hasAttendancePunch) {
+        const impact = LeavePayrollConfigService.evaluateLeaveImpact({
+          employeeId: employee.id,
+          leaveTypeId: app.leaveTypeId,
+          totalDays: app.totalDays,
+          year,
+        });
+        additionalPaid += impact.paidDays;
+        additionalLop += impact.lopDays;
+      }
+    });
+
+    const lopDays = Number((evalResult.totalLopDays + additionalLop).toFixed(1));
+    const paidLeaveDays = evalResult.paidLeaveDays + additionalPaid;
+    const presentDays = Math.max(0, evalResult.presentDays - (additionalLop + additionalPaid));
     const halfDays = evalResult.halfDays;
-    const paidLeaveDays = evalResult.paidLeaveDays;
-    const lopDays = evalResult.totalLopDays;
     const weeklyOffDays = evalResult.weeklyOffDays || 4; // Standard 4 Sundays
     const holidayDays = evalResult.holidayDays || holidayCount;
     let overtimeHours = evalResult.overtimeHours;

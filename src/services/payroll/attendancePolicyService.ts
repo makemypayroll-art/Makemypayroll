@@ -1,8 +1,8 @@
-// Master Attendance Policy Service & Rules Evaluation Engine
 import { StorageEngine, STORAGE_KEYS } from '../../database/storageEngine';
-import { AttendancePolicy, Attendance, Shift } from '../../database/schema';
+import { AttendancePolicy, Attendance, Shift, LeaveApplication } from '../../database/schema';
 import { AuditService } from '../auditService';
 import { EmployeeService } from '../employeeService';
+import { LeavePayrollConfigService } from './leavePayrollConfigService';
 
 export interface AttendancePolicyEvaluationResult {
   presentDays: number;
@@ -249,8 +249,10 @@ export class AttendancePolicyService {
     policy: AttendancePolicy;
     shift?: Shift;
     totalWorkingDays?: number;
+    employeeId?: string;
+    year?: number;
   }): AttendancePolicyEvaluationResult {
-    const { attendance, policy, shift, totalWorkingDays = 26 } = params;
+    const { attendance, policy, shift, totalWorkingDays = 26, employeeId, year = 2026 } = params;
 
     let presentDays = 0;
     let halfDays = 0;
@@ -260,6 +262,13 @@ export class AttendancePolicyService {
     let holidayDays = 0;
     let lateArrivalCount = 0;
     let overtimeHours = 0;
+
+    const targetEmpId = employeeId || (attendance.length > 0 ? attendance[0].employeeId : undefined);
+    const leaveApps = targetEmpId
+      ? StorageEngine.getList<LeaveApplication>(STORAGE_KEYS.LEAVE_APPLICATIONS).filter(
+          a => a.employeeId === targetEmpId && a.status === 'approved'
+        )
+      : [];
 
     const fullDayMinutesThreshold = policy.fullDayHours * 60 - policy.fullDayCreditToleranceMinutes;
     const halfDayMinutesThreshold = policy.halfDayHours * 60;
@@ -296,7 +305,29 @@ export class AttendancePolicyService {
           presentDays += 1;
         }
       } else if (att.status === 'Leave') {
-        paidLeaveDays += 1;
+        // Evaluate Paid vs Unpaid / LOP based on Leave Configuration & Employee Balance
+        const matchingApp = leaveApps.find(a => att.date >= a.startDate && att.date <= a.endDate);
+        if (matchingApp && targetEmpId) {
+          const impact = LeavePayrollConfigService.evaluateLeaveImpact({
+            employeeId: targetEmpId,
+            leaveTypeId: matchingApp.leaveTypeId,
+            totalDays: 1,
+            year,
+          });
+          if (impact.lopDays > 0) {
+            lopDays += 1;
+          } else {
+            paidLeaveDays += 1;
+          }
+        } else if (
+          att.notes?.toLowerCase().includes('lwp') ||
+          att.notes?.toLowerCase().includes('lop') ||
+          att.notes?.toLowerCase().includes('unpaid')
+        ) {
+          lopDays += 1;
+        } else {
+          paidLeaveDays += 1;
+        }
       } else if (att.status === 'Absent') {
         lopDays += 1;
       } else if (att.status === 'Weekly Off') {

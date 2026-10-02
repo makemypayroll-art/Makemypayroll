@@ -1,6 +1,6 @@
 // ====================================================================
 // Payroll Configuration Host Module
-// Modular container for all 6 core payroll configuration submodules
+// Modular container for all core payroll configuration submodules
 // ====================================================================
 
 import React, { useState } from 'react';
@@ -11,31 +11,35 @@ import {
   Clock,
   Coins,
   Scale,
+  CalendarCheck,
 } from 'lucide-react';
-import { PayrollCycleTab } from './PayrollCycleTab';
 import { AttendancePolicyTab } from './AttendancePolicyTab';
+import { PayrollCycleTab } from './PayrollCycleTab';
 import { HolidayListTab } from './HolidayListTab';
 import { OtManagementTab } from './OtManagementTab';
 import { SalaryComponentsTab } from './SalaryComponentsTab';
+import { LeaveConfigurationTab } from './LeaveConfigurationTab';
 import { DeductionsPenaltiesTab } from './DeductionsPenaltiesTab';
 
 export type PayrollConfigSubTab =
-  | 'cycle'
   | 'attendance_policy'
+  | 'cycle'
   | 'holidays'
   | 'ot'
   | 'salary_components'
+  | 'leave_config'
   | 'deductions';
 
 export const PayrollConfigurationTab: React.FC = () => {
-  const [activeSubTab, setActiveSubTab] = useState<PayrollConfigSubTab>('cycle');
+  const [activeSubTab, setActiveSubTab] = useState<PayrollConfigSubTab>('attendance_policy');
 
   const subTabs = [
-    { id: 'cycle' as const, label: 'Payroll Cycle', icon: <Calendar className="w-3.5 h-3.5" /> },
     { id: 'attendance_policy' as const, label: 'Attendance Policy', icon: <Sliders className="w-3.5 h-3.5" /> },
+    { id: 'cycle' as const, label: 'Payroll Cycle', icon: <Calendar className="w-3.5 h-3.5" /> },
     { id: 'holidays' as const, label: 'Holiday List', icon: <CalendarDays className="w-3.5 h-3.5" /> },
     { id: 'ot' as const, label: 'OT Management', icon: <Clock className="w-3.5 h-3.5" /> },
     { id: 'salary_components' as const, label: 'Salary Components', icon: <Coins className="w-3.5 h-3.5" /> },
+    { id: 'leave_config' as const, label: 'Leave Configuration', icon: <CalendarCheck className="w-3.5 h-3.5" /> },
     { id: 'deductions' as const, label: 'Deductions & Penalties', icon: <Scale className="w-3.5 h-3.5" /> },
   ];
 
@@ -61,11 +65,12 @@ export const PayrollConfigurationTab: React.FC = () => {
 
       {/* Submodule Content */}
       <div className="animate-in fade-in duration-200">
-        {activeSubTab === 'cycle' && <PayrollCycleTab />}
         {activeSubTab === 'attendance_policy' && <AttendancePolicyTab />}
+        {activeSubTab === 'cycle' && <PayrollCycleTab />}
         {activeSubTab === 'holidays' && <HolidayListTab />}
         {activeSubTab === 'ot' && <OtManagementTab />}
         {activeSubTab === 'salary_components' && <SalaryComponentsTab />}
+        {activeSubTab === 'leave_config' && <LeaveConfigurationTab />}
         {activeSubTab === 'deductions' && <DeductionsPenaltiesTab />}
       </div>
     </div>

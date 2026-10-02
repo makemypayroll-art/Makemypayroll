@@ -532,15 +532,23 @@ export interface LeaveType {
   id: string;
   organizationId: string;
   name: string;
-  code: string; // CL, SL, EL, ML, PL, CO, LOP
+  code: string; // CL, SL, EL, ML, PL, CO, LOP, LWP
   description: string;
   annualQuota: number;
+  monthlyEntitlement?: number;
+  annualEntitlement?: number;
   accrualFrequency: 'monthly' | 'quarterly' | 'annual';
   carryForwardMax: number;
+  maxCarryForwardDays?: number;
+  maxBalance?: number;
   isHalfDayAllowed: boolean;
   requiresDoc: boolean;
   isPaid: boolean;
+  status?: 'Active' | 'Inactive';
   color: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface LeaveBalance {
