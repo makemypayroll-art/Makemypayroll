@@ -24,6 +24,8 @@ const MODULE_TITLES: Record<string, string> = {
   inventory: 'Inventory Management',
   geolocation: 'Geo-Location',
   payroll: 'Payroll Management',
+  tasks: 'Task Management',
+  insights: 'MMP Insights',
   settings: 'Settings & Administration',
 };
 

@@ -10,6 +10,7 @@ import {
   Package,
   MapPin,
   FileSpreadsheet,
+  CheckSquare,
   Settings,
   ChevronRight,
   Sparkles,
@@ -21,6 +22,7 @@ import { LeaveService } from '../services/leaveService';
 import { ShiftService } from '../services/shiftService';
 import { TicketService } from '../services/ticketService';
 import { OnboardingService } from '../services/onboardingService';
+import { TaskService } from '../services/taskService';
 import { cn } from '../utils/cn';
 
 interface SidebarProps {
@@ -36,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
   setIsOpen,
 }) => {
-  const { currentUser, can, isSuperAdmin, isHR, isManager, activeTenant, signOut } = useAuth();
+  const { currentUser, currentEmployee, can, isSuperAdmin, isHR, isManager, activeTenant, signOut } = useAuth();
 
   // Dynamic counts for badges
   const pendingLeaves = LeaveService.getApplications().filter(a => a.status === 'pending').length;
@@ -45,6 +47,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ).length;
   const openTickets = TicketService.getAll().filter(t => t.status === 'Open' || t.status === 'In Progress').length;
   const submittedOnboarding = OnboardingService.getAll().filter(o => o.status === 'submitted').length;
+  const currentEmpId = currentEmployee?.id || currentUser.id;
+  const pendingTasks = TaskService.getMyTasks(currentEmpId).filter(t => t.status !== 'Completed').length;
 
   const navigationItems = [
     {
@@ -120,6 +124,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: <FileSpreadsheet className="w-5 h-5" />,
       moduleKey: 'payroll',
       badge: null,
+    },
+    {
+      id: 'tasks',
+      name: 'Task Management',
+      icon: <CheckSquare className="w-5 h-5" />,
+      moduleKey: 'tasks',
+      badge: pendingTasks > 0 ? `${pendingTasks}` : null,
+      badgeColor: 'bg-indigo-500 text-white',
     },
     {
       id: 'insights',

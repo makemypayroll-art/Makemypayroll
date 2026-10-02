@@ -1361,7 +1361,7 @@ export interface Notification {
   recipientEmployeeId?: string;
   title: string;
   message: string;
-  type: 'leave' | 'shift' | 'attendance' | 'ticket' | 'onboarding' | 'payroll' | 'asset' | 'system';
+  type: 'leave' | 'shift' | 'attendance' | 'ticket' | 'onboarding' | 'payroll' | 'asset' | 'task' | 'project' | 'system';
   link?: string;
   isRead: boolean;
   createdAt: string;
@@ -1429,4 +1429,150 @@ export interface SystemPolicySettings {
     esiEmployerRatePercent: number;
     standardWorkingDaysPerMonth: number;
   };
+}
+
+// -------------------------------------------------------------
+// TASK MANAGEMENT & SEQUENTIAL TEAM PROJECT WORKFLOWS
+// -------------------------------------------------------------
+
+export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+export type TaskStatus = 'Not Started' | 'In Progress' | 'Pending' | 'Completed' | 'Overdue' | 'Cancelled';
+export type ProjectStatus = 'Draft' | 'In Progress' | 'Completed' | 'On Hold' | 'Cancelled';
+export type ProjectStageStatus = 'Pending' | 'Active' | 'Completed' | 'Returned' | 'Locked';
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  departmentName?: string;
+  content: string;
+  attachments?: string[];
+  createdAt: string;
+}
+
+export interface TaskActivity {
+  id: string;
+  taskId: string;
+  userId: string;
+  userName: string;
+  action: string;
+  details?: string;
+  timestamp: string;
+}
+
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  url: string;
+  size?: string;
+  uploadDate: string;
+}
+
+export interface TaskItem {
+  id: string;
+  taskCode: string; // e.g. "TSK-1001"
+  organizationId: string;
+  tenantId?: string;
+  title: string;
+  description: string;
+  assignedById: string;
+  assignedByName: string;
+  assignedToId: string;
+  assignedToName: string;
+  assignedToAvatar?: string;
+  departmentId?: string;
+  departmentName?: string;
+  priority: TaskPriority;
+  category: string; // "Development", "HR & Admin", "Finance", "Sales", "Operations", "Compliance", "Client Support", "General"
+  startDate: string; // YYYY-MM-DD
+  dueDate: string;   // YYYY-MM-DD
+  status: TaskStatus;
+  progress: number; // 0 to 100
+  attachments: TaskAttachment[];
+  additionalInstructions?: string;
+  comments: TaskComment[];
+  activities: TaskActivity[];
+  completedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectStage {
+  id: string;
+  projectId: string;
+  departmentId: string;
+  departmentName: string;
+  departmentColor?: string;
+  sequence: number; // 1, 2, 3, 4, 5...
+  assignedEmployeeId?: string;
+  assignedEmployeeName?: string;
+  status: ProjectStageStatus;
+  startDate?: string;
+  dueDate?: string;
+  completedDate?: string;
+  progress: number; // 0 to 100
+  submissionNotes?: string;
+  returnReason?: string;
+  attachments?: Array<{ id: string; name: string; url: string; uploadDate: string }>;
+}
+
+export interface ProjectComment {
+  id: string;
+  projectId: string;
+  stageId?: string;
+  authorId: string;
+  authorName: string;
+  departmentName?: string;
+  content: string;
+  attachments?: string[];
+  createdAt: string;
+}
+
+export interface ProjectActivity {
+  id: string;
+  projectId: string;
+  stageId?: string;
+  userId: string;
+  userName: string;
+  departmentName?: string;
+  action: string;
+  details?: string;
+  timestamp: string;
+}
+
+export interface TeamProject {
+  id: string;
+  projectCode: string; // e.g. "PRJ-1001"
+  organizationId: string;
+  tenantId?: string;
+  name: string;
+  description: string;
+  client: string; // Client / Company Name
+  ownerEmployeeId: string;
+  ownerName: string;
+  priority: TaskPriority;
+  startDate: string;
+  targetDate: string;
+  status: ProjectStatus;
+  currentDepartmentId: string;
+  currentDepartmentName: string;
+  currentStageIndex: number;
+  stages: ProjectStage[];
+  attachments: Array<{ id: string; name: string; url: string; uploadDate: string }>;
+  comments: ProjectComment[];
+  activities: ProjectActivity[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkflowTemplate {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string;
+  departmentSequence: Array<{ departmentId: string; departmentName: string; color?: string }>;
+  isDefault?: boolean;
+  createdAt: string;
 }
