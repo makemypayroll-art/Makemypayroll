@@ -1614,6 +1614,7 @@ export const INITIAL_TENANTS: Tenant[] = [
       'inventory',
       'geolocation',
       'payroll',
+      'tasks',
       'settings'
     ],
     primaryAdmin: {
@@ -1662,6 +1663,7 @@ export const INITIAL_TENANTS: Tenant[] = [
       'inventory',
       'geolocation',
       'payroll',
+      'tasks',
       'settings'
     ],
     primaryAdmin: {
@@ -1708,7 +1710,8 @@ export const INITIAL_TENANTS: Tenant[] = [
       'attendance',
       'leaves',
       'employees',
-      'payroll'
+      'payroll',
+      'tasks'
     ],
     primaryAdmin: {
       name: 'Vikram Malhotra',
@@ -1753,6 +1756,7 @@ export const INITIAL_TENANTS: Tenant[] = [
       'employees',
       'tickets',
       'onboarding',
+      'tasks',
       'settings'
     ],
     primaryAdmin: {
@@ -1798,7 +1802,8 @@ export const INITIAL_TENANTS: Tenant[] = [
       'dashboard',
       'attendance',
       'leaves',
-      'employees'
+      'employees',
+      'tasks'
     ],
     primaryAdmin: {
       name: 'Rohan Mehra',
@@ -1845,6 +1850,7 @@ export const INITIAL_TENANTS: Tenant[] = [
       'inventory',
       'geolocation',
       'payroll',
+      'tasks',
       'settings'
     ],
     primaryAdmin: {

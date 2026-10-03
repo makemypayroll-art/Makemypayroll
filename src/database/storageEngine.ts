@@ -175,10 +175,26 @@ export class StorageEngine {
             if (index === -1) {
               tenants.push(initTenant);
               changed = true;
-            } else if (!tenants[index].slug && initTenant.slug) {
-              tenants[index].slug = initTenant.slug;
-              tenants[index].subdomain = initTenant.subdomain || initTenant.slug;
-              changed = true;
+            } else {
+              if (!tenants[index].slug && initTenant.slug) {
+                tenants[index].slug = initTenant.slug;
+                tenants[index].subdomain = initTenant.subdomain || initTenant.slug;
+                changed = true;
+              }
+              // Safely sync enabledModules for seed tenants (e.g. adding 'tasks')
+              if (initTenant.enabledModules && initTenant.enabledModules.length > 0) {
+                if (!tenants[index].enabledModules) {
+                  tenants[index].enabledModules = [...initTenant.enabledModules];
+                  changed = true;
+                } else {
+                  for (const mod of initTenant.enabledModules) {
+                    if (!tenants[index].enabledModules!.includes(mod)) {
+                      tenants[index].enabledModules!.push(mod);
+                      changed = true;
+                    }
+                  }
+                }
+              }
             }
           }
           if (changed) {
