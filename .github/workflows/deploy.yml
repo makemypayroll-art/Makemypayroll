@@ -27,7 +27,7 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20.x
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -36,10 +36,13 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: TypeScript Compilation & Production Build
+      - name: Build Production Bundle
         run: npm run build
 
-      - name: Upload Artifacts
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: './dist'
@@ -47,4 +50,5 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
 
