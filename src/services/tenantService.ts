@@ -33,7 +33,9 @@ export class TenantService {
         (t.id && t.id.toLowerCase() === clean) ||
         (t.tenantId && t.tenantId.toLowerCase() === clean) ||
         (t.slug && t.slug.toLowerCase() === clean) ||
-        (t.subdomain && t.subdomain.toLowerCase() === clean)
+        (t.subdomain && t.subdomain.toLowerCase() === clean) ||
+        (t.clientCode && t.clientCode.toLowerCase() === clean) ||
+        (t.companyName && normalizeSlug(t.companyName) === clean)
     );
   }
 
@@ -47,7 +49,8 @@ export class TenantService {
         (t.subdomain && t.subdomain.toLowerCase() === cleanSlug) ||
         (t.tenantId && t.tenantId.toLowerCase() === cleanSlug) ||
         (t.id && t.id.toLowerCase() === cleanSlug) ||
-        (t.clientCode && t.clientCode.toLowerCase() === cleanSlug)
+        (t.clientCode && t.clientCode.toLowerCase() === cleanSlug) ||
+        (t.companyName && normalizeSlug(t.companyName) === cleanSlug)
     );
   }
 
